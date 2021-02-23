@@ -17,6 +17,10 @@ tablegen(LLVM ARMGenSystemRegister.inc -gen-searchable-tables)
 
 add_public_tablegen_target(ARMCommonTableGen)
 
+set(ARMRandezvous_SOURCES
+  ARMRandezvousInstrumentor.cpp
+)
+
 add_llvm_target(ARMCodeGen
   A15SDOptimizer.cpp
   ARMAsmPrinter.cpp
@@ -61,6 +65,7 @@ add_llvm_target(ARMCodeGen
   Thumb2ITBlockPass.cpp
   Thumb2InstrInfo.cpp
   Thumb2SizeReduction.cpp
+  ${ARMRandezvous_SOURCES}
   )
 
 add_subdirectory(AsmParser)
