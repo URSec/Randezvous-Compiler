@@ -161,7 +161,7 @@ MachineRegisterInfo *MachineInstr::getRegInfo() {
 /// operands already be on their use lists.
 void MachineInstr::RemoveRegOperandsFromUseLists(MachineRegisterInfo &MRI) {
   for (MachineOperand &MO : operands())
-    if (MO.isReg())
+    if (MO.isReg() && MO.isOnRegUseList())
       MRI.removeRegOperandFromUseList(&MO);
 }
 
@@ -170,7 +170,7 @@ void MachineInstr::RemoveRegOperandsFromUseLists(MachineRegisterInfo &MRI) {
 /// operands not be on their use lists yet.
 void MachineInstr::AddRegOperandsToUseLists(MachineRegisterInfo &MRI) {
   for (MachineOperand &MO : operands())
-    if (MO.isReg())
+    if (MO.isReg() && !MO.isOnRegUseList())
       MRI.addRegOperandToUseList(&MO);
 }
 
