@@ -1,0 +1,316 @@
+//===- ARMRandezvousCLR.cpp - ARM Randezvous Code Layout Randomization ----===//
+//
+// This file was written by at the University of Rochester.
+// All Rights Reserved.
+//
+//===----------------------------------------------------------------------===//
+//
+// This file contains the implementation of a pass that randomizes the code
+// layout of ARM machine code.
+//
+//===----------------------------------------------------------------------===//
+
+#define DEBUG_TYPE "arm-randezvous-clr"
+
+#include "ARMRandezvousCLR.h"
+#include "llvm/IR/IRBuilder.h"
+
+using namespace llvm;
+
+static cl::opt<bool>
+EnableRandezvousCLR("arm-randezvous-clr",
+                    cl::Hidden,
+                    cl::desc("Enable ARM Randezvous Code Layout Randomization"),
+                    cl::init(false));
+
+static cl::opt<bool>
+EnableRandezvousBBLR("arm-randezvous-bblr",
+                     cl::Hidden,
+                     cl::desc("Enable Basic Block Layout Randomization for ARM "
+                              "Randezvous CLR"),
+                     cl::init(false));
+
+static cl::opt<uint64_t>
+RandezvousCLRSeed("arm-randezvous-clr-seed",
+                  cl::Hidden,
+                  cl::desc("Seed for the RNG used in ARM Randezvous CLR"),
+                  cl::init(0));
+
+static cl::opt<uint64_t>
+MaxTextSize("arm-randezvous-max-text-size",
+             cl::Hidden,
+             cl::desc("Maximum text section size in bytes"),
+             cl::init(0x1e0000));   // 2 MB - 128 KB
+
+char ARMRandezvousCLR::ID = 0;
+
+ARMRandezvousCLR::ARMRandezvousCLR() : ModulePass(ID) {
+}
+
+StringRef
+ARMRandezvousCLR::getPassName() const {
+  return "ARM Randezvous Code Layout Randomization Pass";
+}
+
+void
+ARMRandezvousCLR::getAnalysisUsage(AnalysisUsage & AU) const {
+  // We need this to access MachineFunctions
+  AU.addRequired<MachineModuleInfoWrapperPass>();
+
+  AU.setPreservesCFG();
+  ModulePass::getAnalysisUsage(AU);
+}
+
+void
+ARMRandezvousCLR::releaseMemory() {
+  TrapBlocks.clear();
+}
+
+//
+// Method: getNumTrapBlocks()
+//
+// Description:
+//   This methods gives the number of trap blocks this pass inserted.
+//
+// Return value:
+//   The number of trap blocks.
+//
+uint64_t
+ARMRandezvousCLR::getNumTrapBlocks() const {
+  return TrapBlocks.size();
+}
+
+//
+// Method: getTrapBlock()
+//
+// Description:
+//   This method returns a BasicBlock that corresponds to a trap instruction
+//   this pass inserted, by a given index.
+//
+// Input:
+//   Idx - An index into the trap blocks.
+//
+// Return value:
+//   A pointer to the indexed trap block.
+//
+BasicBlock *
+ARMRandezvousCLR::getTrapBlock(uint64_t Idx) const {
+  assert(Idx < getNumTrapBlocks() && "Trap block index out of bound!");
+  return TrapBlocks[Idx];
+}
+
+//
+// Method: shuffleMachineBasicBlocks()
+//
+// Description:
+//   This method shuffles the order of MachineBasicBlocks in a MachineFunction.
+//   It shuffles all the basic blocks except the entry block, so fall-through
+//   blocks will be taken apart and branch instructions will be inserted
+//   appropriately to preserve the CFG.
+//
+// Inputs:
+//   MF  - A reference to the MachineFunction.
+//   RNG - A reference to a RandomNumberGenerator for generating pseudo-random
+//         numbers.
+//
+// Output:
+//   MF - The transformed MachineFunction.
+//
+void
+ARMRandezvousCLR::shuffleMachineBasicBlocks(MachineFunction & MF,
+                                            RandomNumberGenerator & RNG) {
+  // Shuffling has no effect on functions with fewer than 3 MachineBasicBlocks
+  // (because we are not reordering the entry block)
+  if (MF.size() < 3) {
+    return;
+  }
+
+  // Add an unconditional branch to all MachineBasicBlocks that fall through so
+  // that we can safely take them apart from their fall-through blocks
+  std::deque<MachineBasicBlock *> MBBs;
+  const TargetInstrInfo * TII = MF.getSubtarget().getInstrInfo();
+  for (MachineBasicBlock & MBB : MF) {
+    MachineBasicBlock * FallThruMBB = MBB.getFallThrough();
+    if (FallThruMBB != nullptr) {
+      BuildMI(MBB, MBB.end(), DebugLoc(), TII->get(ARM::t2B))
+      .addMBB(FallThruMBB)
+      .add(predOps(ARMCC::AL));
+    }
+    if (MBB.pred_size() != 0) {
+      MBBs.push_back(&MBB);
+    }
+  }
+
+  // Now do shuffling; ilist (iplist_impl) does not support iterator
+  // increment/decrement so we have to first do out-of-place shuffling and then
+  // do in-place removal and insertion
+  auto & MBBList = (&MF)->*(MachineFunction::getSublistAccess)(nullptr);
+  llvm::shuffle(MBBs.begin(), MBBs.end(), RNG);
+  for (MachineBasicBlock * MBB : MBBs) {
+    MBBList.remove(MBB);
+  }
+  for (MachineBasicBlock * MBB : MBBs) {
+    MBBList.push_back(MBB);
+  }
+}
+
+//
+// Method: insertTrapBlocks()
+//
+// Description:
+//   This method inserts a given number of trap instructions into a Function
+//   and keeps track of each inserted trap instruction as a single basic block.
+//
+// Inputs:
+//   F            - A reference to the Function.
+//   MF           - A reference to the MachineFunction to which F corresponds.
+//   NumTrapInsts - Total number of trap instructions to insert.
+//   RNG          - A reference to a RandomNumberGenerator for
+//                  generating pseudo-random numbers.
+//
+// Output:
+//   MF - The transformed MachineFunction.
+//
+void
+ARMRandezvousCLR::insertTrapBlocks(Function & F, MachineFunction & MF,
+                                   uint64_t NumTrapInsts,
+                                   RandomNumberGenerator & RNG) {
+  LLVMContext & Ctx = F.getContext();
+  const TargetInstrInfo * TII = MF.getSubtarget().getInstrInfo();
+
+  //
+  // In machine IR, disperse trap blocks throughout the MachineFunction, where
+  // the insertion points are the MachineBasicBlocks that do not fall through;
+  // this allows us to preserve the CFG while adding randomness to the inside
+  // of the MachineFunction.
+  //
+  // In LLVM IR, simply place trap blocks at the end of the Function.
+  //
+
+  // Determine where to insert trap instructions
+  std::deque<MachineBasicBlock *> InsertionPts;
+  for (MachineBasicBlock & MBB : MF) {
+    if (!MBB.canFallThrough()) {
+      InsertionPts.push_back(&MBB);
+    }
+  }
+
+  // Determine the numbers of trap instructions to insert at each point
+  uint64_t SumShares = 0;
+  std::deque<uint64_t> Shares(InsertionPts.size());
+  for (uint64_t i = 0; i < InsertionPts.size(); ++i) {
+    Shares[i] = RNG() & 0xffffffff; // Prevent overflow
+    SumShares += Shares[i];
+  }
+  for (uint64_t i = 0; i < InsertionPts.size(); ++i) {
+    Shares[i] = Shares[i] * NumTrapInsts / SumShares;
+  }
+
+  // Do insertion
+  for (uint64_t i = 0; i < InsertionPts.size(); ++i) {
+    for (uint64_t j = 0; j < Shares[i]; ++j) {
+      // Build an IR basic block
+      BasicBlock * BB = BasicBlock::Create(Ctx, "", &F);
+      IRBuilder<> IRB(BB);
+      IRB.CreateUnreachable();
+
+      // Build a machine IR basic block
+      MachineBasicBlock * MBB = MF.CreateMachineBasicBlock(BB);
+      BuildMI(MBB, DebugLoc(), TII->get(ARM::tTRAP));
+      MF.push_back(MBB);
+      MBB->moveAfter(InsertionPts[i]);
+
+      // Keep track of the basic block
+      TrapBlocks.push_back(BB);
+    }
+  }
+}
+
+//
+// Method: runOnModule()
+//
+// Description:
+//   This method is called when the PassManager wants this pass to transform
+//   the specified Module.  This method shuffles the order of functions within
+//   the module and/or the order of basic blocks within each function, and
+//   inserts trap instructions to fill the text section.
+//
+// Input:
+//   M - A reference to the Module to transform.
+//
+// Output:
+//   M - The transformed Module.
+//
+// Return value:
+//   true  - The Module was transformed.
+//   false - The Module was not transformed.
+//
+bool
+ARMRandezvousCLR::runOnModule(Module & M) {
+  if (!EnableRandezvousCLR) {
+    return false;
+  }
+
+  MachineModuleInfo & MMI = getAnalysis<MachineModuleInfoWrapperPass>().getMMI();
+  Twine RNGName = getPassName() + "-" + Twine(RandezvousCLRSeed);
+  std::unique_ptr<RandomNumberGenerator> RNG = M.createRNG(RNGName.str());
+
+  // First, shuffle the order of basic blocks in each function (if requested)
+  // and calculate how much space existing functions have taken up
+  uint64_t TotalTextSize = 0;
+  std::deque<std::tuple<Function *, MachineFunction *> > Functions;
+  for (Function & F : M) {
+    MachineFunction * MF = MMI.getMachineFunction(F);
+    if (MF == nullptr) {
+      continue;
+    }
+
+    if (EnableRandezvousBBLR) {
+      shuffleMachineBasicBlocks(*MF, *RNG);
+    }
+
+    uint64_t TextSize = getFunctionCodeSize(*MF);
+    if (TextSize != 0) {
+      Functions.push_back(std::make_tuple(&F, MF));
+      TotalTextSize += TextSize;
+    }
+  }
+  assert(TotalTextSize <= MaxTextSize && "Text size exceeds the limit");
+
+  // Second, shuffle the order of functions; SymbolTableList (iplist_impl) does
+  // not support iterator increment/decrement so we have to first do
+  // out-of-place shuffling and then do in-place removal and insertion
+  SymbolTableList<Function> & FunctionList = M.getFunctionList();
+  llvm::shuffle(Functions.begin(), Functions.end(), *RNG);
+  for (auto & FMF : Functions) {
+    FunctionList.remove(std::get<0>(FMF));
+  }
+  for (auto & FMF : Functions) {
+    FunctionList.push_back(std::get<0>(FMF));
+  }
+
+  // Third, determine the numbers of trap instructions to insert
+  uint64_t NumTrapInsts = (MaxTextSize - TotalTextSize) / 2;
+  uint64_t SumShares = 0;
+  std::deque<uint64_t> Shares(Functions.size());
+  for (uint64_t i = 0; i < Functions.size(); ++i) {
+    Shares[i] = (*RNG)() & 0xffffffff; // Prevent overflow
+    SumShares += Shares[i];
+  }
+  for (uint64_t i = 0; i < Functions.size(); ++i) {
+    Shares[i] = Shares[i] * NumTrapInsts / SumShares;
+  }
+
+  // Lastly, insert trap instructions into each function
+  for (uint64_t i = 0; i < Functions.size(); ++i) {
+    insertTrapBlocks(*std::get<0>(Functions[i]), *std::get<1>(Functions[i]),
+                     Shares[i], *RNG);
+  }
+
+  return true;
+}
+
+ModulePass *
+llvm::createARMRandezvousCLR(void) {
+  return new ARMRandezvousCLR();
+}

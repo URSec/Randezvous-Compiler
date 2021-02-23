@@ -1,0 +1,47 @@
+//===- ARMRandezvousCLR.h - ARM Randezvous Code Layout Randomization ------===//
+//
+// This file was written by at the University of Rochester.
+// All Rights Reserved.
+//
+//===----------------------------------------------------------------------===//
+//
+// This file defines the interfaces of a pass that randomizes the code layout
+// of ARM machine code.
+//
+//===----------------------------------------------------------------------===//
+
+#ifndef ARM_RANDEZVOUS_CLR
+#define ARM_RANDEZVOUS_CLR
+
+#include "ARMRandezvousInstrumentor.h"
+#include "llvm/CodeGen/MachineModuleInfo.h"
+#include "llvm/Pass.h"
+#include "llvm/Support/RandomNumberGenerator.h"
+
+namespace llvm {
+  struct ARMRandezvousCLR : public ModulePass, ARMRandezvousInstrumentor {
+    // Pass Identifier
+    static char ID;
+
+    ARMRandezvousCLR();
+    virtual StringRef getPassName() const override;
+    void getAnalysisUsage(AnalysisUsage & AU) const override;
+    void releaseMemory() override;
+    virtual bool runOnModule(Module & M) override;
+
+    uint64_t getNumTrapBlocks() const;
+    BasicBlock * getTrapBlock(uint64_t Idx) const;
+
+  private:
+    std::deque<BasicBlock *> TrapBlocks;
+
+    void shuffleMachineBasicBlocks(MachineFunction & MF,
+                                   RandomNumberGenerator & RNG);
+    void insertTrapBlocks(Function & F, MachineFunction & MF,
+                          uint64_t NumTrapInsts, RandomNumberGenerator & RNG);
+  };
+
+  ModulePass * createARMRandezvousCLR(void);
+}
+
+#endif
