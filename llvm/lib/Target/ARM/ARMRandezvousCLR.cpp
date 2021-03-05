@@ -13,34 +13,10 @@
 #define DEBUG_TYPE "arm-randezvous-clr"
 
 #include "ARMRandezvousCLR.h"
+#include "ARMRandezvousOptions.h"
 #include "llvm/IR/IRBuilder.h"
 
 using namespace llvm;
-
-static cl::opt<bool>
-EnableRandezvousCLR("arm-randezvous-clr",
-                    cl::Hidden,
-                    cl::desc("Enable ARM Randezvous Code Layout Randomization"),
-                    cl::init(false));
-
-static cl::opt<bool>
-EnableRandezvousBBLR("arm-randezvous-bblr",
-                     cl::Hidden,
-                     cl::desc("Enable Basic Block Layout Randomization for ARM "
-                              "Randezvous CLR"),
-                     cl::init(false));
-
-static cl::opt<uint64_t>
-RandezvousCLRSeed("arm-randezvous-clr-seed",
-                  cl::Hidden,
-                  cl::desc("Seed for the RNG used in ARM Randezvous CLR"),
-                  cl::init(0));
-
-static cl::opt<uint64_t>
-MaxTextSize("arm-randezvous-max-text-size",
-             cl::Hidden,
-             cl::desc("Maximum text section size in bytes"),
-             cl::init(0x1e0000));   // 2 MB - 128 KB
 
 char ARMRandezvousCLR::ID = 0;
 
@@ -275,7 +251,7 @@ ARMRandezvousCLR::runOnModule(Module & M) {
       TotalTextSize += TextSize;
     }
   }
-  assert(TotalTextSize <= MaxTextSize && "Text size exceeds the limit");
+  assert(TotalTextSize <= RandezvousMaxTextSize && "Text size exceeds the limit");
 
   // Second, shuffle the order of functions; SymbolTableList (iplist_impl) does
   // not support iterator increment/decrement so we have to first do
@@ -290,7 +266,7 @@ ARMRandezvousCLR::runOnModule(Module & M) {
   }
 
   // Third, determine the numbers of trap instructions to insert
-  uint64_t NumTrapInsts = (MaxTextSize - TotalTextSize) / 2;
+  uint64_t NumTrapInsts = (RandezvousMaxTextSize - TotalTextSize) / 2;
   uint64_t SumShares = 0;
   std::deque<uint64_t> Shares(Functions.size());
   for (uint64_t i = 0; i < Functions.size(); ++i) {
