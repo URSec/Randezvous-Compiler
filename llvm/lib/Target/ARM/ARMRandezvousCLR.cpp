@@ -37,44 +37,6 @@ ARMRandezvousCLR::getAnalysisUsage(AnalysisUsage & AU) const {
   ModulePass::getAnalysisUsage(AU);
 }
 
-void
-ARMRandezvousCLR::releaseMemory() {
-  TrapBlocks.clear();
-}
-
-//
-// Method: getNumTrapBlocks()
-//
-// Description:
-//   This methods gives the number of trap blocks this pass inserted.
-//
-// Return value:
-//   The number of trap blocks.
-//
-uint64_t
-ARMRandezvousCLR::getNumTrapBlocks() const {
-  return TrapBlocks.size();
-}
-
-//
-// Method: getTrapBlock()
-//
-// Description:
-//   This method returns a BasicBlock that corresponds to a trap instruction
-//   this pass inserted, by a given index.
-//
-// Input:
-//   Idx - An index into the trap blocks.
-//
-// Return value:
-//   A pointer to the indexed trap block.
-//
-BasicBlock *
-ARMRandezvousCLR::getTrapBlock(uint64_t Idx) const {
-  assert(Idx < getNumTrapBlocks() && "Trap block index out of bound!");
-  return TrapBlocks[Idx];
-}
-
 //
 // Method: shuffleMachineBasicBlocks()
 //
@@ -195,9 +157,8 @@ ARMRandezvousCLR::insertTrapBlocks(Function & F, MachineFunction & MF,
       BuildMI(MBB, DebugLoc(), TII->get(ARM::tTRAP));
       MF.push_back(MBB);
       MBB->moveAfter(InsertionPts[i]);
-
-      // Keep track of the basic block
-      TrapBlocks.push_back(BB);
+      MBB->setHasAddressTaken();
+      MBB->setIsRandezvousTrapBlock();
     }
   }
 }

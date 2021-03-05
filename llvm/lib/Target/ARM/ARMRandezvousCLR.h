@@ -26,15 +26,9 @@ namespace llvm {
     ARMRandezvousCLR();
     virtual StringRef getPassName() const override;
     void getAnalysisUsage(AnalysisUsage & AU) const override;
-    void releaseMemory() override;
     virtual bool runOnModule(Module & M) override;
 
-    uint64_t getNumTrapBlocks() const;
-    BasicBlock * getTrapBlock(uint64_t Idx) const;
-
   private:
-    std::deque<BasicBlock *> TrapBlocks;
-
     void shuffleMachineBasicBlocks(MachineFunction & MF,
                                    RandomNumberGenerator & RNG);
     void insertTrapBlocks(Function & F, MachineFunction & MF,
