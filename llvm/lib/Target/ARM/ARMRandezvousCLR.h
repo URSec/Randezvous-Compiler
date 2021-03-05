@@ -29,10 +29,11 @@ namespace llvm {
     virtual bool runOnModule(Module & M) override;
 
   private:
-    void shuffleMachineBasicBlocks(MachineFunction & MF,
-                                   RandomNumberGenerator & RNG);
+    std::unique_ptr<RandomNumberGenerator> RNG;
+
+    void shuffleMachineBasicBlocks(MachineFunction & MF);
     void insertTrapBlocks(Function & F, MachineFunction & MF,
-                          uint64_t NumTrapInsts, RandomNumberGenerator & RNG);
+                          uint64_t NumTrapInsts);
   };
 
   ModulePass * createARMRandezvousCLR(void);
