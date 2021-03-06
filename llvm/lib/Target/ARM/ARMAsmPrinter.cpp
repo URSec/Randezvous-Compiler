@@ -15,6 +15,7 @@
 #include "ARM.h"
 #include "ARMConstantPoolValue.h"
 #include "ARMMachineFunctionInfo.h"
+#include "ARMRandezvousCLR.h"
 #include "ARMTargetMachine.h"
 #include "ARMTargetObjectFile.h"
 #include "MCTargetDesc/ARMAddressingModes.h"
@@ -64,6 +65,22 @@ void ARMAsmPrinter::emitFunctionBodyEnd() {
     return;
   InConstantPool = false;
   OutStreamer->emitDataRegion(MCDR_DataRegionEnd);
+}
+
+void ARMAsmPrinter::emitBasicBlockStart(const MachineBasicBlock & MBB) {
+  // Mark address-taken trap blocks as functions so that their addresses
+  // will have the lowest bit (Thumb bit) set
+  if (MBB.isRandezvousTrapBlock()) {
+    const BasicBlock * BB = MBB.getBasicBlock();
+    assert(BB != nullptr && "No corresponding BB for a trap block!");
+    if (BB->hasAddressTaken()) {
+      for (MCSymbol * Symbol : MMI->getAddrLabelSymbolToEmit(BB)) {
+        OutStreamer->emitSymbolAttribute(Symbol, MCSA_ELF_TypeFunction);
+      }
+    }
+  }
+
+  AsmPrinter::emitBasicBlockStart(MBB);
 }
 
 void ARMAsmPrinter::emitFunctionEntryLabel() {
