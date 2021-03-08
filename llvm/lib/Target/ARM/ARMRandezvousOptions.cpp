@@ -30,6 +30,30 @@ BBLR("arm-randezvous-bblr",
      cl::location(EnableRandezvousBBLR),
      cl::init(false));
 
+bool EnableRandezvousGRBG;
+static cl::opt<bool, true>
+GRBG("arm-randezvous-grbg",
+     cl::Hidden,
+     cl::desc("Enable ARM Randezvou Global Random Background"),
+     cl::location(EnableRandezvousGRBG),
+     cl::init(false));
+
+bool EnableRandezvousShadowStack;
+static cl::opt<bool, true>
+ShadowStack("arm-randezvous-shadow-stack",
+            cl::Hidden,
+            cl::desc("Enable ARM Randezvous Shadow Stack"),
+            cl::location(EnableRandezvousShadowStack),
+            cl::init(false));
+
+bool EnableRandezvousRAN;
+static cl::opt<bool, true>
+RAN("arm-randezvous-ran",
+    cl::Hidden,
+    cl::desc("Enable ARM Randezvous Return Address Nullification"),
+    cl::location(EnableRandezvousRAN),
+    cl::init(false));
+
 uint64_t RandezvousCLRSeed;
 static cl::opt<uint64_t, true>
 CLRSeed("arm-randezvous-clr-seed",
@@ -38,6 +62,14 @@ CLRSeed("arm-randezvous-clr-seed",
         cl::location(RandezvousCLRSeed),
         cl::init(0));
 
+uint64_t RandezvousShadowStackSeed;
+static cl::opt<uint64_t, true>
+ShadowStackSeed("arm-randezvous-shadow-stack-seed",
+                cl::Hidden,
+                cl::desc("Seed for the RNG used in ARM Randezvous Shadow Stack"),
+                cl::location(RandezvousShadowStackSeed),
+                cl::init(0));
+
 size_t RandezvousMaxTextSize;
 static cl::opt<size_t, true>
 MaxTextSize("arm-randezvous-max-text-size",
@@ -45,3 +77,27 @@ MaxTextSize("arm-randezvous-max-text-size",
             cl::desc("Maximum text section size in bytes"),
             cl::location(RandezvousMaxTextSize),
             cl::init(0x1e0000));   // 2 MB - 128 KB
+
+size_t RandezvousShadowStackSize;
+static cl::opt<size_t, true>
+ShadowStackSize("arm-randezvous-shadow-stack-size",
+                cl::Hidden,
+                cl::desc("ARM Randezvous Shadow Stack size in bytes"),
+                cl::location(RandezvousShadowStackSize),
+                cl::init(0x40000));   // 256 KB
+
+unsigned RandezvousShadowStackStrideLength;
+static cl::opt<unsigned, true>
+ShadowStackStrideLength("arm-randezvous-shadow-stack-stride-length",
+                        cl::Hidden,
+                        cl::desc("Number of bits for ARM Randezvous Shadow Stack stride"),
+                        cl::location(RandezvousShadowStackStrideLength),
+                        cl::init(8));
+
+uintptr_t RandezvousRNGAddress;
+static cl::opt<uintptr_t, true>
+RNGAddress("arm-randezvous-rng-addr",
+           cl::Hidden,
+           cl::desc("Address of a dynamic RNG"),
+           cl::location(RandezvousRNGAddress),
+           cl::init(0));

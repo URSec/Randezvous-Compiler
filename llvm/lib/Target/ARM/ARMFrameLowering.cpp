@@ -15,6 +15,7 @@
 #include "ARMBaseRegisterInfo.h"
 #include "ARMConstantPoolValue.h"
 #include "ARMMachineFunctionInfo.h"
+#include "ARMRandezvousOptions.h"
 #include "ARMSubtarget.h"
 #include "MCTargetDesc/ARMAddressingModes.h"
 #include "MCTargetDesc/ARMBaseInfo.h"
@@ -395,6 +396,11 @@ void ARMFrameLowering::emitPrologue(MachineFunction &MF,
   // Determine spill area sizes.
   for (unsigned i = 0, e = CSI.size(); i != e; ++i) {
     unsigned Reg = CSI[i].getReg();
+    if (Reg == ARM::LR && EnableRandezvousShadowStack) {
+      // Don't count LR if the shadow stack pass is enabled; see the comment
+      // in ARMFrameLowering::assignCalleeSavedSpillSlots()
+      continue;
+    }
     int FI = CSI[i].getFrameIdx();
     switch (Reg) {
     case ARM::R8:
@@ -617,6 +623,11 @@ void ARMFrameLowering::emitPrologue(MachineFunction &MF,
     int CFIIndex;
     for (const auto &Entry : CSI) {
       unsigned Reg = Entry.getReg();
+      if (Reg == ARM::LR && EnableRandezvousShadowStack) {
+        // Don't count LR if the shadow stack pass is enabled; see the comment
+        // in ARMFrameLowering::assignCalleeSavedSpillSlots()
+        continue;
+      }
       int FI = Entry.getFrameIdx();
       switch (Reg) {
       case ARM::R8:
@@ -2177,6 +2188,19 @@ bool ARMFrameLowering::assignCalleeSavedSpillSlots(
       MF.getInfo<ARMFunctionInfo>()->isCmseNSEntryFunction()) {
     CSI.emplace_back(ARM::FPCXTNS);
     CSI.back().setRestored(false);
+  }
+
+  if (EnableRandezvousShadowStack) {
+    // If spilling LR, mark LR as spilled to a register (PC here just for
+    // convenience).  NOTE: This is a hack to keep LR in the callee-saved
+    // registers without actually reserving a spill slot for LR.  In this way,
+    // the shadow stack pass can safely remove the LR/PC operand of a PUSH/POP
+    // without changing the already-built stack frame.
+    for (auto & CS : CSI) {
+      if (CS.getReg() == ARM::LR) {
+        CS.setDstReg(ARM::PC);
+      }
+    }
   }
 
   return false;

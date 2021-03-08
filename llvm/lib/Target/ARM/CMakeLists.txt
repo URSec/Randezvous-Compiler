@@ -21,6 +21,7 @@ set(ARMRandezvous_SOURCES
   ARMRandezvousCLR.cpp
   ARMRandezvousInstrumentor.cpp
   ARMRandezvousOptions.cpp
+  ARMRandezvousShadowStack.cpp
 )
 
 add_llvm_target(ARMCodeGen
