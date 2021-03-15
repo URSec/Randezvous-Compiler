@@ -75,8 +75,10 @@ ARMRandezvousInstrumentor::findIT(MachineInstr & MI, unsigned & distance) {
   MachineInstr * Prev = &MI;
   unsigned dist = 0;
   while (Prev != nullptr && dist < 5 && Prev->getOpcode() != ARM::t2IT) {
+    if (!Prev->isDebugInstr()) {
+      ++dist;
+    }
     Prev = Prev->getPrevNode();
-    ++dist;
   }
   if (Prev != nullptr && dist < 5 && Prev->getOpcode() == ARM::t2IT) {
     if (getITBlockSize(*Prev) >= dist) {
@@ -161,6 +163,8 @@ ARMRandezvousInstrumentor::insertInstAfter(MachineInstr & MI,
 void
 ARMRandezvousInstrumentor::insertInstsBefore(MachineInstr & MI,
                                              std::deque<MachineInstr *> & Insts) {
+  assert(!MI.isDebugInstr() && "Cannot instrument debug instruction!");
+
   MachineFunction & MF = *MI.getMF();
   MachineBasicBlock & MBB = *MI.getParent();
   const TargetInstrInfo * TII = MF.getSubtarget().getInstrInfo();
@@ -185,24 +189,38 @@ ARMRandezvousInstrumentor::insertInstsBefore(MachineInstr & MI,
     // Find the range of instructions that are supposed to be in IT block(s)
     MachineBasicBlock::iterator firstMI(IT->getNextNode()); // Inclusive
     MachineBasicBlock::iterator lastMI(MI);                 // Non-inclusive
-    for (unsigned i = distance; i <= ITBlockSize; ++i) {
+    for (unsigned i = distance; i <= ITBlockSize; ) {
       ++lastMI;
+      // Skip debug instructions if we have not reached the end
+      if (i == ITBlockSize || !lastMI->isDebugInstr()) {
+        ++i;
+      }
     }
 
-    // Track new instructions in DQMask
+    // Track new non-debug instructions in DQMask
     auto it = DQMask.begin();
     for (unsigned i = 0; i < distance - 1; ++i) {
       it++;
     }
-    DQMask.insert(it, Insts.size(), sameAsFirstCond);
+    size_t NumNonDebugInsts = Insts.size();
+    for (MachineInstr * Inst : Insts) {
+      if (Inst->isDebugInstr()) {
+        --NumNonDebugInsts;
+      }
+    }
+    DQMask.insert(it, NumNonDebugInsts, sameAsFirstCond);
 
     // Insert ITs to cover instructions from [firstMI, lastMI)
     for (MachineBasicBlock::iterator i(firstMI); i != lastMI; ) {
       std::deque<bool> NewDQMask;
       MachineBasicBlock::iterator j(i);
-      for (unsigned k = 0; k < 4 && j != lastMI; ++j, ++k) {
+      for (unsigned k = 0; k < 4 && j != lastMI; ++j) {
+        if (j->isDebugInstr()) {
+          continue;
+        }
         NewDQMask.push_back(DQMask.front());
         DQMask.pop_front();
+        ++k;
       }
       bool flip = false;
       if (!NewDQMask[0]) {
@@ -238,6 +256,8 @@ ARMRandezvousInstrumentor::insertInstsBefore(MachineInstr & MI,
 void
 ARMRandezvousInstrumentor::insertInstsAfter(MachineInstr & MI,
                                             std::deque<MachineInstr *> & Insts) {
+  assert(!MI.isDebugInstr() && "Cannot instrument debug instruction!");
+
   MachineFunction & MF = *MI.getMF();
   MachineBasicBlock & MBB = *MI.getParent();
   const TargetInstrInfo * TII = MF.getSubtarget().getInstrInfo();
@@ -263,24 +283,38 @@ ARMRandezvousInstrumentor::insertInstsAfter(MachineInstr & MI,
     // Find the range of instructions that are supposed to be in IT block(s)
     MachineBasicBlock::iterator firstMI(IT->getNextNode()); // Inclusive
     MachineBasicBlock::iterator lastMI(Insts.back());       // Non-inclusive
-    for (unsigned i = distance; i <= ITBlockSize; ++i) {
+    for (unsigned i = distance; i <= ITBlockSize; ) {
       ++lastMI;
+      // Skip debug instructions if we have not reached the end
+      if (i == ITBlockSize || !lastMI->isDebugInstr()) {
+        ++i;
+      }
     }
 
-    // Track new instructions in DQMask
+    // Track new non-debug instructions in DQMask
     auto it = DQMask.begin();
     for (unsigned i = 0; i <= distance - 1; ++i) {
       it++;
     }
-    DQMask.insert(it, Insts.size(), sameAsFirstCond);
+    size_t NumNonDebugInsts = Insts.size();
+    for (MachineInstr * Inst : Insts) {
+      if (Inst->isDebugInstr()) {
+        --NumNonDebugInsts;
+      }
+    }
+    DQMask.insert(it, NumNonDebugInsts, sameAsFirstCond);
 
     // Insert ITs to cover instructions from [firstMI, lastMI)
     for (MachineBasicBlock::iterator i(firstMI); i != lastMI; ) {
       std::deque<bool> NewDQMask;
       MachineBasicBlock::iterator j(i);
-      for (unsigned k = 0; k < 4 && j != lastMI; ++j, ++k) {
+      for (unsigned k = 0; k < 4 && j != lastMI; ++j) {
+        if (j->isDebugInstr()) {
+          continue;
+        }
         NewDQMask.push_back(DQMask.front());
         DQMask.pop_front();
+        ++k;
       }
       bool flip = false;
       if (!NewDQMask[0]) {
@@ -314,6 +348,8 @@ ARMRandezvousInstrumentor::insertInstsAfter(MachineInstr & MI,
 //
 void
 ARMRandezvousInstrumentor::removeInst(MachineInstr & MI) {
+  assert(!MI.isDebugInstr() && "Cannot instrument debug instruction!");
+
   unsigned distance;
   MachineInstr * IT = findIT(MI, distance);
 
@@ -374,6 +410,8 @@ ARMRandezvousInstrumentor::removeInst(MachineInstr & MI) {
 //
 MachineBasicBlock *
 ARMRandezvousInstrumentor::splitBasicBlockBefore(MachineInstr & MI) {
+  assert(!MI.isDebugInstr() && "Cannot instrument debug instruction!");
+
   unsigned distance;
   MachineInstr * IT = findIT(MI, distance);
 
@@ -454,6 +492,8 @@ ARMRandezvousInstrumentor::splitBasicBlockBefore(MachineInstr & MI) {
 //
 MachineBasicBlock *
 ARMRandezvousInstrumentor::splitBasicBlockAfter(MachineInstr & MI) {
+  assert(!MI.isDebugInstr() && "Cannot instrument debug instruction!");
+
   unsigned distance;
   MachineInstr * IT = findIT(MI, distance);
 
@@ -606,6 +646,8 @@ ARMRandezvousInstrumentor::encodeITMask(std::deque<bool> DQMask) {
 std::deque<unsigned>
 ARMRandezvousInstrumentor::findFreeRegistersBefore(const MachineInstr & MI,
                                                    bool Thumb) {
+  assert(!MI.isDebugInstr() && "Cannot instrument debug instruction!");
+
   unsigned distance;
   const MachineInstr * IT = findIT(MI, distance);
 
@@ -695,6 +737,8 @@ ARMRandezvousInstrumentor::findFreeRegistersBefore(const MachineInstr & MI,
 std::deque<unsigned>
 ARMRandezvousInstrumentor::findFreeRegistersAfter(const MachineInstr & MI,
                                                   bool Thumb) {
+  assert(!MI.isDebugInstr() && "Cannot instrument debug instruction!");
+
   unsigned distance;
   const MachineInstr * IT = findIT(MI, distance);
 
