@@ -186,8 +186,14 @@ static int sizeOfSPAdjustment(const MachineInstr &MI) {
   int count = 0;
   // ARM and Thumb2 push/pop insts have explicit "sp, sp" operands (+
   // pred) so the list starts at 4.
-  for (int i = MI.getNumOperands() - 1; i >= 4; --i)
+  for (int i = MI.getNumOperands() - 1; i >= 4; --i) {
+    // Don't count LR if the shadow stack pass is enabled; see the comment in
+    // ARMFrameLowering::assignCalleeSavedSpillSlots()
+    if (EnableRandezvousShadowStack && MI.getOperand(i).getReg() == ARM::LR) {
+      continue;
+    }
     count += RegSize;
+  }
   return count;
 }
 
