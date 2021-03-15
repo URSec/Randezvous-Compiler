@@ -63,8 +63,10 @@ ARMRandezvousInstrumentor::getITBlockSize(const MachineInstr & IT) {
 //   MI itself is IT) between the IT and MI.  If there is no such IT, a null
 //   pointer is returned.
 //
-// Inputs:
-//   MI       - A reference to an instruction from which to find IT.
+// Input:
+//   MI - A reference to an instruction from which to find IT.
+//
+// Output:
 //   distance - A reference to an unsigned to store the distance.
 //
 // Return value:
@@ -94,11 +96,14 @@ ARMRandezvousInstrumentor::findIT(MachineInstr & MI, unsigned & distance) {
 //
 // Description:
 //   This method finds the IT instruction that forms an IT block containing a
-//   given instruction MI.  It also computes the distance (from 1 to 4) between
-//   the IT and MI.  If there is no such IT, a null pointer is returned.
+//   given instruction MI.  It also computes the distance (from 0 to 4, 0 means
+//   MI itself is IT) between the IT and MI.  If there is no such IT, a null
+//   pointer is returned.
 //
-// Inputs:
-//   MI       - A const reference to an instruction from which to find IT.
+// Input:
+//   MI - A const reference to an instruction from which to find IT.
+//
+// Output:
 //   distance - A reference to an unsigned to store the distance.
 //
 // Return value:
@@ -210,7 +215,7 @@ ARMRandezvousInstrumentor::insertInstsBefore(MachineInstr & MI,
     }
     DQMask.insert(it, NumNonDebugInsts, sameAsFirstCond);
 
-    // Insert ITs to cover instructions from [firstMI, lastMI)
+    // Insert ITs to cover instructions in [firstMI, lastMI)
     for (MachineBasicBlock::iterator i(firstMI); i != lastMI; ) {
       std::deque<bool> NewDQMask;
       MachineBasicBlock::iterator j(i);
@@ -304,7 +309,7 @@ ARMRandezvousInstrumentor::insertInstsAfter(MachineInstr & MI,
     }
     DQMask.insert(it, NumNonDebugInsts, sameAsFirstCond);
 
-    // Insert ITs to cover instructions from [firstMI, lastMI)
+    // Insert ITs to cover instructions in [firstMI, lastMI)
     for (MachineBasicBlock::iterator i(firstMI); i != lastMI; ) {
       std::deque<bool> NewDQMask;
       MachineBasicBlock::iterator j(i);
