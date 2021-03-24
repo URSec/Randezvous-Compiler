@@ -71,7 +71,7 @@ ARMRandezvousCLR::shuffleMachineBasicBlocks(MachineFunction & MF) {
       .addMBB(FallThruMBB)
       .add(predOps(ARMCC::AL));
     }
-    if (MBB.pred_size() != 0) {
+    if (MBB.getIterator() != MF.begin()) {
       MBBs.push_back(&MBB);
     }
   }
