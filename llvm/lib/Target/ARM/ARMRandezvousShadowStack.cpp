@@ -380,12 +380,7 @@ ARMRandezvousShadowStack::popFromShadowStack(MachineInstr & MI,
   // Now insert these new instructions into the basic block
   insertInstsAfter(MI, NewInsts);
 
-  if (EnableRandezvousRAN) {
-    // Nullify the return address in the shadow stack
-    nullifyReturnAddress(*NewInsts[2], NewInsts[2]->getOperand(0));
-  }
-
-  // At last, replace the old POP with a new one that doesn't write to PC/LR
+  // Replace the old POP with a new one that doesn't write to PC/LR
   switch (MI.getOpcode()) {
   case ARM::t2LDMIA_RET:
     MI.setDesc(TII->get(ARM::t2LDMIA_UPD));
@@ -429,6 +424,11 @@ ARMRandezvousShadowStack::popFromShadowStack(MachineInstr & MI,
     // LDR_POST only loads one register, so we just remove it
     removeInst(MI);
     break;
+  }
+
+  if (EnableRandezvousRAN) {
+    // Nullify the return address in the shadow stack
+    nullifyReturnAddress(*NewInsts[2], NewInsts[2]->getOperand(0));
   }
 
   return true;
