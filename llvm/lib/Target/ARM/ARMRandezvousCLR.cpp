@@ -13,34 +13,10 @@
 #define DEBUG_TYPE "arm-randezvous-clr"
 
 #include "ARMRandezvousCLR.h"
+#include "ARMRandezvousOptions.h"
 #include "llvm/IR/IRBuilder.h"
 
 using namespace llvm;
-
-static cl::opt<bool>
-EnableRandezvousCLR("arm-randezvous-clr",
-                    cl::Hidden,
-                    cl::desc("Enable ARM Randezvous Code Layout Randomization"),
-                    cl::init(false));
-
-static cl::opt<bool>
-EnableRandezvousBBLR("arm-randezvous-bblr",
-                     cl::Hidden,
-                     cl::desc("Enable Basic Block Layout Randomization for ARM "
-                              "Randezvous CLR"),
-                     cl::init(false));
-
-static cl::opt<uint64_t>
-RandezvousCLRSeed("arm-randezvous-clr-seed",
-                  cl::Hidden,
-                  cl::desc("Seed for the RNG used in ARM Randezvous CLR"),
-                  cl::init(0));
-
-static cl::opt<uint64_t>
-MaxTextSize("arm-randezvous-max-text-size",
-             cl::Hidden,
-             cl::desc("Maximum text section size in bytes"),
-             cl::init(0x1e0000));   // 2 MB - 128 KB
 
 char ARMRandezvousCLR::ID = 0;
 
@@ -61,44 +37,6 @@ ARMRandezvousCLR::getAnalysisUsage(AnalysisUsage & AU) const {
   ModulePass::getAnalysisUsage(AU);
 }
 
-void
-ARMRandezvousCLR::releaseMemory() {
-  TrapBlocks.clear();
-}
-
-//
-// Method: getNumTrapBlocks()
-//
-// Description:
-//   This methods gives the number of trap blocks this pass inserted.
-//
-// Return value:
-//   The number of trap blocks.
-//
-uint64_t
-ARMRandezvousCLR::getNumTrapBlocks() const {
-  return TrapBlocks.size();
-}
-
-//
-// Method: getTrapBlock()
-//
-// Description:
-//   This method returns a BasicBlock that corresponds to a trap instruction
-//   this pass inserted, by a given index.
-//
-// Input:
-//   Idx - An index into the trap blocks.
-//
-// Return value:
-//   A pointer to the indexed trap block.
-//
-BasicBlock *
-ARMRandezvousCLR::getTrapBlock(uint64_t Idx) const {
-  assert(Idx < getNumTrapBlocks() && "Trap block index out of bound!");
-  return TrapBlocks[Idx];
-}
-
 //
 // Method: shuffleMachineBasicBlocks()
 //
@@ -110,15 +48,12 @@ ARMRandezvousCLR::getTrapBlock(uint64_t Idx) const {
 //
 // Inputs:
 //   MF  - A reference to the MachineFunction.
-//   RNG - A reference to a RandomNumberGenerator for generating pseudo-random
-//         numbers.
 //
 // Output:
 //   MF - The transformed MachineFunction.
 //
 void
-ARMRandezvousCLR::shuffleMachineBasicBlocks(MachineFunction & MF,
-                                            RandomNumberGenerator & RNG) {
+ARMRandezvousCLR::shuffleMachineBasicBlocks(MachineFunction & MF) {
   // Shuffling has no effect on functions with fewer than 3 MachineBasicBlocks
   // (because we are not reordering the entry block)
   if (MF.size() < 3) {
@@ -145,7 +80,7 @@ ARMRandezvousCLR::shuffleMachineBasicBlocks(MachineFunction & MF,
   // increment/decrement so we have to first do out-of-place shuffling and then
   // do in-place removal and insertion
   auto & MBBList = (&MF)->*(MachineFunction::getSublistAccess)(nullptr);
-  llvm::shuffle(MBBs.begin(), MBBs.end(), RNG);
+  llvm::shuffle(MBBs.begin(), MBBs.end(), *RNG);
   for (MachineBasicBlock * MBB : MBBs) {
     MBBList.remove(MBB);
   }
@@ -165,16 +100,13 @@ ARMRandezvousCLR::shuffleMachineBasicBlocks(MachineFunction & MF,
 //   F            - A reference to the Function.
 //   MF           - A reference to the MachineFunction to which F corresponds.
 //   NumTrapInsts - Total number of trap instructions to insert.
-//   RNG          - A reference to a RandomNumberGenerator for
-//                  generating pseudo-random numbers.
 //
 // Output:
 //   MF - The transformed MachineFunction.
 //
 void
 ARMRandezvousCLR::insertTrapBlocks(Function & F, MachineFunction & MF,
-                                   uint64_t NumTrapInsts,
-                                   RandomNumberGenerator & RNG) {
+                                   uint64_t NumTrapInsts) {
   LLVMContext & Ctx = F.getContext();
   const TargetInstrInfo * TII = MF.getSubtarget().getInstrInfo();
 
@@ -199,7 +131,7 @@ ARMRandezvousCLR::insertTrapBlocks(Function & F, MachineFunction & MF,
   uint64_t SumShares = 0;
   std::deque<uint64_t> Shares(InsertionPts.size());
   for (uint64_t i = 0; i < InsertionPts.size(); ++i) {
-    Shares[i] = RNG() & 0xffffffff; // Prevent overflow
+    Shares[i] = (*RNG)() & 0xffffffff; // Prevent overflow
     SumShares += Shares[i];
   }
   for (uint64_t i = 0; i < InsertionPts.size(); ++i) {
@@ -219,9 +151,8 @@ ARMRandezvousCLR::insertTrapBlocks(Function & F, MachineFunction & MF,
       BuildMI(MBB, DebugLoc(), TII->get(ARM::tTRAP));
       MF.push_back(MBB);
       MBB->moveAfter(InsertionPts[i]);
-
-      // Keep track of the basic block
-      TrapBlocks.push_back(BB);
+      MBB->setHasAddressTaken();
+      MBB->setIsRandezvousTrapBlock();
     }
   }
 }
@@ -253,7 +184,7 @@ ARMRandezvousCLR::runOnModule(Module & M) {
 
   MachineModuleInfo & MMI = getAnalysis<MachineModuleInfoWrapperPass>().getMMI();
   Twine RNGName = getPassName() + "-" + Twine(RandezvousCLRSeed);
-  std::unique_ptr<RandomNumberGenerator> RNG = M.createRNG(RNGName.str());
+  RNG = M.createRNG(RNGName.str());
 
   // First, shuffle the order of basic blocks in each function (if requested)
   // and calculate how much space existing functions have taken up
@@ -266,7 +197,7 @@ ARMRandezvousCLR::runOnModule(Module & M) {
     }
 
     if (EnableRandezvousBBLR) {
-      shuffleMachineBasicBlocks(*MF, *RNG);
+      shuffleMachineBasicBlocks(*MF);
     }
 
     uint64_t TextSize = getFunctionCodeSize(*MF);
@@ -275,7 +206,7 @@ ARMRandezvousCLR::runOnModule(Module & M) {
       TotalTextSize += TextSize;
     }
   }
-  assert(TotalTextSize <= MaxTextSize && "Text size exceeds the limit");
+  assert(TotalTextSize <= RandezvousMaxTextSize && "Text size exceeds the limit");
 
   // Second, shuffle the order of functions; SymbolTableList (iplist_impl) does
   // not support iterator increment/decrement so we have to first do
@@ -290,7 +221,7 @@ ARMRandezvousCLR::runOnModule(Module & M) {
   }
 
   // Third, determine the numbers of trap instructions to insert
-  uint64_t NumTrapInsts = (MaxTextSize - TotalTextSize) / 2;
+  uint64_t NumTrapInsts = (RandezvousMaxTextSize - TotalTextSize) / 2;
   uint64_t SumShares = 0;
   std::deque<uint64_t> Shares(Functions.size());
   for (uint64_t i = 0; i < Functions.size(); ++i) {
@@ -304,7 +235,7 @@ ARMRandezvousCLR::runOnModule(Module & M) {
   // Lastly, insert trap instructions into each function
   for (uint64_t i = 0; i < Functions.size(); ++i) {
     insertTrapBlocks(*std::get<0>(Functions[i]), *std::get<1>(Functions[i]),
-                     Shares[i], *RNG);
+                     Shares[i]);
   }
 
   return true;

@@ -15,6 +15,8 @@
 #include "ARMBaseInstrInfo.h"
 #include "ARMFrameLowering.h"
 #include "ARMMachineFunctionInfo.h"
+#include "ARMRandezvousOptions.h"
+#include "ARMRandezvousShadowStack.h"
 #include "ARMSubtarget.h"
 #include "MCTargetDesc/ARMAddressingModes.h"
 #include "MCTargetDesc/ARMBaseInfo.h"
@@ -201,6 +203,10 @@ getReservedRegs(const MachineFunction &MF) const {
   // Some targets reserve R9.
   if (STI.isR9Reserved())
     markSuperRegs(Reserved, ARM::R9);
+  if (EnableRandezvousShadowStack) {
+    markSuperRegs(Reserved, ARMRandezvousShadowStack::ShadowStackPtrReg);
+    markSuperRegs(Reserved, ARMRandezvousShadowStack::ShadowStackStrideReg);
+  }
   // Reserve D16-D31 if the subtarget doesn't support them.
   if (!STI.hasD32()) {
     static_assert(ARM::D31 == ARM::D16 + 15, "Register list not consecutive!");

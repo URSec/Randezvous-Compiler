@@ -94,6 +94,7 @@ public:
     // we emit constant pools customly!
   }
   void emitFunctionBodyEnd() override;
+  void emitBasicBlockStart(const MachineBasicBlock & MBB) override;
   void emitFunctionEntryLabel() override;
   void emitStartOfAsmFile(Module &M) override;
   void emitEndOfAsmFile(Module &M) override;
