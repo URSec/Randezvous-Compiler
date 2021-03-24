@@ -14,6 +14,7 @@
 
 #include "ARMRandezvousCLR.h"
 #include "ARMRandezvousOptions.h"
+#include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/IR/IRBuilder.h"
 
 using namespace llvm;

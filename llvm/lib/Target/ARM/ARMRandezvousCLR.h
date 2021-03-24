@@ -14,7 +14,6 @@
 #define ARM_RANDEZVOUS_CLR
 
 #include "ARMRandezvousInstrumentor.h"
-#include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/RandomNumberGenerator.h"
 

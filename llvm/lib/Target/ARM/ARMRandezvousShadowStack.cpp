@@ -17,6 +17,7 @@
 #include "ARMRandezvousOptions.h"
 #include "ARMRandezvousShadowStack.h"
 #include "MCTargetDesc/ARMAddressingModes.h"
+#include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/Transforms/Utils/ModuleUtils.h"
 #include "llvm/Support/RandomNumberGenerator.h"

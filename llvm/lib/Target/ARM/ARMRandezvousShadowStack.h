@@ -14,9 +14,8 @@
 #define ARM_RANDEZVOUS_SHADOW_STACK
 
 #include "ARMRandezvousInstrumentor.h"
-#include "llvm/CodeGen/MachineModuleInfo.h"
-#include "llvm/IR/Module.h"
 #include "llvm/Pass.h"
+#include "llvm/Support/RandomNumberGenerator.h"
 
 namespace llvm {
   struct ARMRandezvousShadowStack : public ModulePass, ARMRandezvousInstrumentor {
