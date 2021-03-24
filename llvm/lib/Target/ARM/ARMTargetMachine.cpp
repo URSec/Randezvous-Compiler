@@ -13,6 +13,7 @@
 #include "ARM.h"
 #include "ARMMacroFusion.h"
 #include "ARMRandezvousCLR.h"
+#include "ARMRandezvousLGPromote.h"
 #include "ARMSubtarget.h"
 #include "ARMTargetObjectFile.h"
 #include "ARMTargetTransformInfo.h"
@@ -430,6 +431,9 @@ void ARMPassConfig::addIRPasses() {
   // Add Control Flow Guard checks.
   if (TM->getTargetTriple().isOSWindows())
     addPass(createCFGuardCheckPass());
+
+  // Add Randezvous Local To Global Function Pointer Promotion pass
+  addPass(createARMRandezvousLGPromote());
 }
 
 void ARMPassConfig::addCodeGenPrepare() {
