@@ -160,11 +160,11 @@ ARMRandezvousShadowStack::createInitFunction(Module & M, GlobalVariable & SS) {
     const TargetInstrInfo * TII = MF.getSubtarget().getInstrInfo();
     MachineBasicBlock * MBB = MF.CreateMachineBasicBlock(BB);
     MF.push_back(MBB);
-    // MOVi16 ShadowStackPtrReg, @SS_lo
+    // MOVi16 SSPtrReg, @SS_lo
     BuildMI(MBB, DebugLoc(), TII->get(ARM::t2MOVi16), ShadowStackPtrReg)
     .addGlobalAddress(&SS, 0, ARMII::MO_LO16)
     .add(predOps(ARMCC::AL));
-    // MOVTi16 ShadowStackPtrReg, @SS_hi
+    // MOVTi16 SSPtrReg, @SS_hi
     BuildMI(MBB, DebugLoc(), TII->get(ARM::t2MOVTi16), ShadowStackPtrReg)
     .addReg(ShadowStackPtrReg)
     .addGlobalAddress(&SS, 0, ARMII::MO_HI16)
@@ -188,17 +188,17 @@ ARMRandezvousShadowStack::createInitFunction(Module & M, GlobalVariable & SS) {
         .addImm((RandezvousRNGAddress >> 16) & 0xffff)
         .add(predOps(ARMCC::AL));
       }
-      // LDRi12 ShadowStackStrideReg, [R0, #0]
+      // LDRi12 SSStrideReg, [R0, #0]
       BuildMI(MBB, DebugLoc(), TII->get(ARM::t2LDRi12), ShadowStackStrideReg)
       .addReg(ARM::R0)
       .addImm(0)
       .add(predOps(ARMCC::AL));
-      // BFC ShadowStackStrideReg, #StrideLength - 1, #33 - StrideLength
+      // BFC SSStrideReg, #(SSStrideLength - 1), #(33 - SSStrideLength)
       BuildMI(MBB, DebugLoc(), TII->get(ARM::t2BFC), ShadowStackStrideReg)
       .addReg(ShadowStackStrideReg)
       .addImm((1 << (RandezvousShadowStackStrideLength - 1)) - 1)
       .add(predOps(ARMCC::AL));
-      // BFC ShadowStackStrideReg, #0, #2
+      // BFC SSStrideReg, #0, #2
       BuildMI(MBB, DebugLoc(), TII->get(ARM::t2BFC), ShadowStackStrideReg)
       .addReg(ShadowStackStrideReg)
       .addImm(~0x3)
@@ -245,8 +245,9 @@ ARMRandezvousShadowStack::createInitFunction(Module & M, GlobalVariable & SS) {
 //   inserts new instructions that save LR to the shadow stack.
 //
 // Inputs:
-//   MI - A reference to a PUSH instruction that saves LR to the stack.
-//   LR - A reference to the LR operand of the PUSH.
+//   MI     - A reference to a PUSH instruction that saves LR to the stack.
+//   LR     - A reference to the LR operand of the PUSH.
+//   Stride - A static stride to use.
 //
 // Return value:
 //   true - The machine code was modified.
@@ -264,9 +265,9 @@ ARMRandezvousShadowStack::pushToShadowStack(MachineInstr & MI,
 
   // Build the following instruction sequence
   //
-  // STRi12   LR, ShadowStackPtrReg, #0
-  // ADDrr    ShadowStackPtrReg, ShadowStackPtrReg, ShadowStackStrideReg
-  // ADDri12  ShadowStackPtrReg, ShadowStackPtrReg, #per-function-stride
+  // STRi12   LR, [SSPtrReg, #0]
+  // ADDrr    SSPtrReg, SSPtrReg, SSStrideReg
+  // ADDri12  SSPtrReg, SSPtrReg, #Stride
   std::deque<MachineInstr *> NewInsts;
   NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::t2STRi12))
                      .addReg(ARM::LR)
@@ -338,8 +339,9 @@ ARMRandezvousShadowStack::pushToShadowStack(MachineInstr & MI,
 //   PC/LR.
 //
 // Inputs:
-//   MI   - A reference to a POP instruction that writes to LR or PC.
-//   PCLR - A reference to the PC or LR operand of the POP.
+//   MI     - A reference to a POP instruction that writes to LR or PC.
+//   PCLR   - A reference to the PC or LR operand of the POP.
+//   Stride - A static stride to use.
 //
 // Return value:
 //   true - The machine code was modified.
@@ -357,9 +359,9 @@ ARMRandezvousShadowStack::popFromShadowStack(MachineInstr & MI,
 
   // Build the following instruction sequence
   //
-  // SUBri12  ShadowStackPtrReg, ShadowStackPtrReg, #per-function-stride
-  // SUBrr    ShadowStackPtrReg, ShadowStackPtrReg, ShadowStackStrideReg
-  // LDRi12   PC/LR, ShadowStackPtrReg, #0
+  // SUBri12  SSPtrReg, SSPtrReg, #Stride
+  // SUBrr    SSPtrReg, SSPtrReg, SSStrideReg
+  // LDRri12  PC/LR, [SSPtrReg, #0]
   std::deque<MachineInstr *> NewInsts;
   NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::t2SUBri12), ShadowStackPtrReg)
                      .addReg(ShadowStackPtrReg)
@@ -519,16 +521,16 @@ ARMRandezvousShadowStack::nullifyReturnAddress(MachineInstr & MI,
     break;
   }
 
-  // LDRi12 PC/LR, [ShadowStackPtrReg, #0] -> LDRi12 LR, [ShadowStackPtrReg, #0]
-  //                                          MOVi16 R12, #0
-  //                                          STRi12 R12, [R8, #0]
-  //                                          BX_RET ; If PCLR == PC
+  // LDRi12 PC/LR, [SSPtrReg, #0] -> LDRi12 LR, [SSPtrReg, #0]
+  //                                 MOVi16 R12, #0
+  //                                 STRi12 R12, [SSPtrReg, #0]
+  //                                 BX_RET ; If PCLR == PC
   //
-  //                                       or LDRi12  LR, [R8, #0]
-  //                                          MOVi16  R12, #null-lo16
-  //                                          MOVTi16 R12, #null-hi16
-  //                                          STRi12  R12, [ShadowStackPtrReg, #0]
-  //                                          BX_RET ; If PCLR == PC
+  //                              or LDRi12  LR, [SSPtrReg, #0]
+  //                                 MOVi16  R12, #null-lo16
+  //                                 MOVTi16 R12, #null-hi16
+  //                                 STRi12  R12, [SSPtrReg, #0]
+  //                                 BX_RET ; If PCLR == PC
   default:
     assert(MI.getOpcode() == ARM::t2LDRi12);
     assert(MI.getOperand(1).getReg() == ShadowStackPtrReg);
