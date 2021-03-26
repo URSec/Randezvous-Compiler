@@ -763,7 +763,6 @@ ARMRandezvousInstrumentor::findFreeRegistersAfter(const MachineInstr & MI,
   // Then move backward step by step to compute live registers after MI
   MachineBasicBlock::const_iterator MBBI(MI);
   MachineBasicBlock::const_iterator I = MBB.end();
-  ++MBBI;
   while (I != MBBI) {
     unsigned distance2;
     const MachineInstr * IT2 = findIT(*--I, distance2);
@@ -786,7 +785,9 @@ ARMRandezvousInstrumentor::findFreeRegistersAfter(const MachineInstr & MI,
       }
     }
 
-    UsedRegs.stepBackward(*I);
+    if (I != MBBI) {
+      UsedRegs.stepBackward(*I);
+    }
   }
 
   // Now add registers that are neither reserved nor live to a free list
