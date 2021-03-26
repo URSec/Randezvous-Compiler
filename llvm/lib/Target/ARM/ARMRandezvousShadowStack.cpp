@@ -17,6 +17,7 @@
 #include "ARMRandezvousOptions.h"
 #include "ARMRandezvousShadowStack.h"
 #include "MCTargetDesc/ARMAddressingModes.h"
+#include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/Transforms/Utils/ModuleUtils.h"
@@ -451,6 +452,18 @@ ARMRandezvousShadowStack::nullifyReturnAddress(MachineInstr & MI,
 
   Register PredReg;
   ARMCC::CondCodes Pred = getInstrPredicate(MI, PredReg);
+
+  // Mark LR as restored since we're going to use LR to hold the return address
+  // in all the cases
+  MachineFrameInfo & MFI = MF.getFrameInfo();
+  if (MFI.isCalleeSavedInfoValid()) {
+    for (CalleeSavedInfo & CSI : MFI.getCalleeSavedInfo()) {
+      if (CSI.getReg() == ARM::LR) {
+        CSI.setRestored(true);
+        break;
+      }
+    }
+  }
 
   std::deque<MachineInstr *> NewInsts;
   switch (MI.getOpcode()) {
