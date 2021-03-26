@@ -1501,6 +1501,15 @@ def : T2Pat<(extloadi16 (ARMWrapper tconstpool:$addr)),
 
 // Indexed loads
 
+let isReturn = 1, isTerminator = 1, isBarrier = 1, mayLoad = 1,
+    hasSideEffects = 0, isCodeGenOnly = 1 in
+def t2LDR_PRE_RET : T2Ipreldst<0, 0b10, 1, 1, (outs GPR:$Rt, GPR:$Rn_wb),
+                               (ins t2addrmode_imm8_pre:$addr),
+                               AddrModeT2_i8, IndexModePre, IIC_iLoad_iu,
+                               "ldr", "\t$Rt, $addr!", "$addr.base = $Rn_wb",
+                               []>,
+                    Sched<[WriteLd]>;
+
 let mayLoad = 1, hasSideEffects = 0 in {
 def t2LDR_PRE  : T2Ipreldst<0, 0b10, 1, 1, (outs GPR:$Rt, GPR:$Rn_wb),
                             (ins t2addrmode_imm8_pre:$addr),

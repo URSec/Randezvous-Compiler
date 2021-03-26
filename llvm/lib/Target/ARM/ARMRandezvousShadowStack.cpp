@@ -265,24 +265,19 @@ ARMRandezvousShadowStack::pushToShadowStack(MachineInstr & MI,
 
   // Build the following instruction sequence
   //
-  // STRi12   LR, [SSPtrReg, #0]
+  // STR_POST LR, [SSPtrReg], #Stride
   // ADDrr    SSPtrReg, SSPtrReg, SSStrideReg
-  // ADDri12  SSPtrReg, SSPtrReg, #Stride
   std::deque<MachineInstr *> NewInsts;
-  NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::t2STRi12))
+  NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::t2STR_POST), ShadowStackPtrReg)
                      .addReg(ARM::LR)
                      .addReg(ShadowStackPtrReg)
-                     .addImm(0)
+                     .addImm(Stride)
                      .add(predOps(Pred, PredReg)));
   NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::t2ADDrr), ShadowStackPtrReg)
                      .addReg(ShadowStackPtrReg)
                      .addReg(ShadowStackStrideReg)
                      .add(predOps(Pred, PredReg))
                      .add(condCodeOp()));
-  NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::t2ADDri12), ShadowStackPtrReg)
-                     .addReg(ShadowStackPtrReg)
-                     .addImm(Stride)
-                     .add(predOps(Pred, PredReg)));
 
   // Now insert these new instructions into the basic block
   insertInstsBefore(MI, NewInsts);
@@ -359,22 +354,21 @@ ARMRandezvousShadowStack::popFromShadowStack(MachineInstr & MI,
 
   // Build the following instruction sequence
   //
-  // SUBri12  SSPtrReg, SSPtrReg, #Stride
   // SUBrr    SSPtrReg, SSPtrReg, SSStrideReg
-  // LDRri12  PC/LR, [SSPtrReg, #0]
+  // LDR_PRE  PC/LR, [SSPtrReg, #-Stride]!
   std::deque<MachineInstr *> NewInsts;
-  NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::t2SUBri12), ShadowStackPtrReg)
-                     .addReg(ShadowStackPtrReg)
-                     .addImm(Stride)
-                     .add(predOps(Pred, PredReg)));
   NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::t2SUBrr), ShadowStackPtrReg)
                      .addReg(ShadowStackPtrReg)
                      .addReg(ShadowStackStrideReg)
                      .add(predOps(Pred, PredReg))
                      .add(condCodeOp()));
-  NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::t2LDRi12), PCLR.getReg())
+  NewInsts.push_back(BuildMI(MF, DL, TII->get(PCLR.getReg() == ARM::PC ?
+                                              ARM::t2LDR_PRE_RET :
+                                              ARM::t2LDR_PRE),
+                             PCLR.getReg())
+                     .addReg(ShadowStackPtrReg, RegState::Define)
                      .addReg(ShadowStackPtrReg)
-                     .addImm(0)
+                     .addImm(-Stride)
                      .add(predOps(Pred, PredReg)));
 
   // Now insert these new instructions into the basic block
@@ -428,7 +422,7 @@ ARMRandezvousShadowStack::popFromShadowStack(MachineInstr & MI,
 
   if (EnableRandezvousRAN) {
     // Nullify the return address in the shadow stack
-    nullifyReturnAddress(*NewInsts[2], NewInsts[2]->getOperand(0));
+    nullifyReturnAddress(*NewInsts[1], NewInsts[1]->getOperand(0));
   }
 
   return true;
@@ -460,19 +454,26 @@ ARMRandezvousShadowStack::nullifyReturnAddress(MachineInstr & MI,
 
   std::deque<MachineInstr *> NewInsts;
   switch (MI.getOpcode()) {
-  // LDMIA_(RET|UPD) SP!, {..., PC/LR} -> LDMIA_UPD SP!, {..., LR}
-  //                                      MOVi16    R12, #0
-  //                                      STRi8     R12, [SP, #-4]
-  //                                      BX_RET ; If PCLR == PC
+  // LDMIA_RET SP!, {..., PC} -> LDMIA_UPD SP!, {..., LR}
+  //                             MOVi16    R12, #0
+  //                             STRi8     R12, [SP, #-4]
+  //                             BX_RET
   case ARM::t2LDMIA_RET:
+    assert(PCLR.getReg() == ARM::PC && "Buggy POP!");
     MI.setDesc(TII->get(ARM::t2LDMIA_UPD));
+    PCLR.setReg(ARM::LR);
+    insertInstAfter(MI, BuildMI(MF, DL, TII->get(ARM::tBX_RET))
+                        .add(predOps(Pred, PredReg)));
     LLVM_FALLTHROUGH;
+  // LDMIA_UPD SP!, {..., LR} -> LDMIA_UPD SP!, {..., LR}
+  //                             MOVi16    R12, #0
+  //                             STRi8     R12, [SP, #-4]
   case ARM::t2LDMIA_UPD:
-  // LDR_POST PC/LR, [SP], #4 -> LDR_POST LR, [SP], #4
-  //                             MOVi16   R12, #0
-  //                             STRi8    R12, [SP, #-4]
-  //                             BX_RET ; If PCLR == PC
+  // LDR_POST LR, [SP], #4 -> LDR_POST LR, [SP], #4
+  //                          MOVi16   R12, #0
+  //                          STRi8    R12, [SP, #-4]
   case ARM::t2LDR_POST:
+    assert(PCLR.getReg() == ARM::LR && "Buggy POP!");
     NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::t2MOVi16), ARM::R12)
                        .addImm(0)
                        .add(predOps(Pred, PredReg)));
@@ -481,11 +482,6 @@ ARMRandezvousShadowStack::nullifyReturnAddress(MachineInstr & MI,
                        .addReg(ARM::SP)
                        .addImm(-4)
                        .add(predOps(Pred, PredReg)));
-    if (PCLR.getReg() == ARM::PC) {
-      NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::tBX_RET))
-                         .add(predOps(Pred, PredReg)));
-      PCLR.setReg(ARM::LR);
-    }
     insertInstsAfter(MI, NewInsts);
     break;
 
@@ -521,20 +517,34 @@ ARMRandezvousShadowStack::nullifyReturnAddress(MachineInstr & MI,
     break;
   }
 
-  // LDRi12 PC/LR, [SSPtrReg, #0] -> LDRi12 LR, [SSPtrReg, #0]
-  //                                 MOVi16 R12, #0
-  //                                 STRi12 R12, [SSPtrReg, #0]
-  //                                 BX_RET ; If PCLR == PC
+  // LDR_PRE_RET PC, [SSPtrReg, #imm]! -> LDR_PRE LR, [SSPtrReg, #imm]!
+  //                                      MOVi16  R12, #0
+  //                                      STRi12  R12, [SSPtrReg, #0]
+  //                                      BX_RET
   //
-  //                              or LDRi12  LR, [SSPtrReg, #0]
-  //                                 MOVi16  R12, #null-lo16
-  //                                 MOVTi16 R12, #null-hi16
-  //                                 STRi12  R12, [SSPtrReg, #0]
-  //                                 BX_RET ; If PCLR == PC
+  //                                   or LDR_PRE LR, [SSPtrReg, #imm]!
+  //                                      MOVi16  R12, #null-lo16
+  //                                      MOVTi16 R12, #null-hi16
+  //                                      STRi12  R12, [SSPtrReg, #0]
+  //                                      BX_RET
+  case ARM::t2LDR_PRE_RET:
+    assert(PCLR.getReg() == ARM::PC && "Buggy POP!");
+    MI.setDesc(TII->get(ARM::t2LDR_PRE));
+    PCLR.setReg(ARM::LR);
+    insertInstAfter(MI, BuildMI(MF, DL, TII->get(ARM::tBX_RET))
+                        .add(predOps(Pred, PredReg)));
+    LLVM_FALLTHROUGH;
+  // LDR_PRE LR, [SSPtrReg, #imm]! -> LDR_PRE LR, [SSPtrReg, #imm]!
+  //                                  MOVi16  R12, #0
+  //                                  STRi12  R12, [SSPtrReg, #0]
+  //
+  //                               or LDR_PRE LR, [SSPtrReg, #imm]!
+  //                                  MOVi16  R12, #null-lo16
+  //                                  MOVTi16 R12, #null-hi16
+  //                                  STRi12  R12, [SSPtrReg, #0]
   default:
-    assert(MI.getOpcode() == ARM::t2LDRi12);
+    assert(MI.getOpcode() == ARM::t2LDR_PRE);
     assert(MI.getOperand(1).getReg() == ShadowStackPtrReg);
-    assert(MI.getOperand(2).getImm() == 0);
     if (EnableRandezvousGRBG && !TrapBlocks.empty()) {
       uint64_t Idx = (*RNG)() % TrapBlocks.size();
       const BasicBlock * BB = TrapBlocks[Idx]->getBasicBlock();
@@ -556,11 +566,6 @@ ARMRandezvousShadowStack::nullifyReturnAddress(MachineInstr & MI,
                        .addReg(ShadowStackPtrReg)
                        .addImm(0)
                        .add(predOps(Pred, PredReg)));
-    if (PCLR.getReg() == ARM::PC) {
-      NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::tBX_RET))
-                         .add(predOps(Pred, PredReg)));
-      PCLR.setReg(ARM::LR);
-    }
     insertInstsAfter(MI, NewInsts);
     break;
   }
@@ -703,6 +708,9 @@ ARMRandezvousShadowStack::runOnModule(Module & M) {
       uint32_t Stride = (*RNG)();
       Stride &= (1ul << (RandezvousShadowStackStrideLength - 1)) - 1;
       Stride &= ~0x3ul;
+      // Limit the static stride to be within 8 bits, so that it can fit in
+      // STR_POST and LDR_PRE as an immediate
+      Stride &= 0xfful;
 
       for (auto & MIMO : Pushes) {
         MachineInstr * MI = std::get<0>(MIMO);
