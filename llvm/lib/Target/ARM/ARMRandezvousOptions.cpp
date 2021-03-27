@@ -14,6 +14,10 @@
 
 using namespace llvm;
 
+//===----------------------------------------------------------------------===//
+// Randezvous pass enablers
+//===----------------------------------------------------------------------===//
+
 bool EnableRandezvousCLR;
 static cl::opt<bool, true>
 CLR("arm-randezvous-clr",
@@ -54,6 +58,10 @@ RAN("arm-randezvous-ran",
     cl::location(EnableRandezvousRAN),
     cl::init(false));
 
+//===----------------------------------------------------------------------===//
+// Randezvous pass seeds
+//===----------------------------------------------------------------------===//
+
 uint64_t RandezvousCLRSeed;
 static cl::opt<uint64_t, true>
 CLRSeed("arm-randezvous-clr-seed",
@@ -70,6 +78,10 @@ ShadowStackSeed("arm-randezvous-shadow-stack-seed",
                 cl::location(RandezvousShadowStackSeed),
                 cl::init(0));
 
+//===----------------------------------------------------------------------===//
+// Size options used by Randezvous passes
+//===----------------------------------------------------------------------===//
+
 size_t RandezvousMaxTextSize;
 static cl::opt<size_t, true>
 MaxTextSize("arm-randezvous-max-text-size",
@@ -85,6 +97,10 @@ ShadowStackSize("arm-randezvous-shadow-stack-size",
                 cl::desc("ARM Randezvous Shadow Stack size in bytes"),
                 cl::location(RandezvousShadowStackSize),
                 cl::init(0x40000));   // 256 KB
+
+//===----------------------------------------------------------------------===//
+// Miscellaneous options used by Randezvous passes
+//===----------------------------------------------------------------------===//
 
 unsigned RandezvousShadowStackStrideLength;
 static cl::opt<unsigned, true>
