@@ -475,11 +475,17 @@ ARMRandezvousShadowStack::nullifyReturnAddress(MachineInstr & MI,
     }
   }
 
+  // We need to use a scratch register as the source register of a store.  If
+  // no free register is around, spill and use R4.
+  std::deque<Register> FreeRegs = findFreeRegistersAfter(MI);
+  bool Spill = FreeRegs.empty();
+  Register FreeReg = Spill ? ARM::R4 : FreeRegs[0];
+
   std::deque<MachineInstr *> NewInsts;
   switch (MI.getOpcode()) {
   // LDMIA_RET SP!, {..., PC} -> LDMIA_UPD SP!, {..., LR}
-  //                             MOVi16    R12, #0
-  //                             STRi8     R12, [SP, #-4]
+  //                             MOVi16    FreeReg, #0
+  //                             STRi8     FreeReg, [SP, #-4]
   //                             BX_RET
   case ARM::t2LDMIA_RET:
     assert(PCLR.getReg() == ARM::PC && "Buggy POP!");
@@ -489,28 +495,38 @@ ARMRandezvousShadowStack::nullifyReturnAddress(MachineInstr & MI,
                         .add(predOps(Pred, PredReg)));
     LLVM_FALLTHROUGH;
   // LDMIA_UPD SP!, {..., LR} -> LDMIA_UPD SP!, {..., LR}
-  //                             MOVi16    R12, #0
-  //                             STRi8     R12, [SP, #-4]
+  //                             MOVi16    FreeReg, #0
+  //                             STRi8     FreeReg, [SP, #-4]
   case ARM::t2LDMIA_UPD:
   // LDR_POST LR, [SP], #4 -> LDR_POST LR, [SP], #4
-  //                          MOVi16   R12, #0
-  //                          STRi8    R12, [SP, #-4]
+  //                          MOVi16   FreeReg, #0
+  //                          STRi8    FreeReg, [SP, #-4]
   case ARM::t2LDR_POST:
     assert(PCLR.getReg() == ARM::LR && "Buggy POP!");
-    NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::t2MOVi16), ARM::R12)
+    if (Spill) {
+      NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::tPUSH))
+                         .add(predOps(Pred, PredReg))
+                         .addReg(FreeReg));
+    }
+    NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::t2MOVi16), FreeReg)
                        .addImm(0)
                        .add(predOps(Pred, PredReg)));
     NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::t2STRi8))
-                       .addReg(ARM::R12)
+                       .addReg(FreeReg)
                        .addReg(ARM::SP)
                        .addImm(-4)
                        .add(predOps(Pred, PredReg)));
+    if (Spill) {
+      NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::tPOP))
+                         .add(predOps(Pred, PredReg))
+                         .addReg(FreeReg));
+    }
     insertInstsAfter(MI, NewInsts);
     break;
 
   // POP(_RET) {..., PC} -> LDMIA_UPD SP!, {..., LR}
-  //                        MOVi16    R12, #0
-  //                        STRi8     R12, [SP, #-4]
+  //                        MOVi16    FreeReg, #0
+  //                        STRi8     FreeReg, [SP, #-4]
   //                        BX_RET
   case ARM::tPOP:
   case ARM::tPOP_RET: {
@@ -525,14 +541,24 @@ ARMRandezvousShadowStack::nullifyReturnAddress(MachineInstr & MI,
       }
     }
     NewInsts.push_back(MIB);
-    NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::t2MOVi16), ARM::R12)
+    if (Spill) {
+      NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::tPUSH))
+                         .add(predOps(Pred, PredReg))
+                         .addReg(FreeReg));
+    }
+    NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::t2MOVi16), FreeReg)
                        .addImm(0)
                        .add(predOps(Pred, PredReg)));
     NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::t2STRi8))
-                       .addReg(ARM::R12)
+                       .addReg(FreeReg)
                        .addReg(ARM::SP)
                        .addImm(-4)
                        .add(predOps(Pred, PredReg)));
+    if (Spill) {
+      NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::tPOP))
+                         .add(predOps(Pred, PredReg))
+                         .addReg(FreeReg));
+    }
     NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::tBX_RET))
                        .add(predOps(Pred, PredReg)));
     insertInstsAfter(MI, NewInsts);
@@ -541,14 +567,14 @@ ARMRandezvousShadowStack::nullifyReturnAddress(MachineInstr & MI,
   }
 
   // LDR_PRE_RET PC, [SSPtrReg, #imm]! -> LDR_PRE LR, [SSPtrReg, #imm]!
-  //                                      MOVi16  R12, #0
-  //                                      STRi12  R12, [SSPtrReg, #0]
+  //                                      MOVi16  FreeReg, #0
+  //                                      STRi12  FreeReg, [SSPtrReg, #0]
   //                                      BX_RET
   //
   //                                   or LDR_PRE LR, [SSPtrReg, #imm]!
-  //                                      MOVi16  R12, #null-lo16
-  //                                      MOVTi16 R12, #null-hi16
-  //                                      STRi12  R12, [SSPtrReg, #0]
+  //                                      MOVi16  FreeReg, #null-lo16
+  //                                      MOVTi16 FreeReg, #null-hi16
+  //                                      STRi12  FreeReg, [SSPtrReg, #0]
   //                                      BX_RET
   case ARM::t2LDR_PRE_RET:
     assert(PCLR.getReg() == ARM::PC && "Buggy POP!");
@@ -558,37 +584,47 @@ ARMRandezvousShadowStack::nullifyReturnAddress(MachineInstr & MI,
                         .add(predOps(Pred, PredReg)));
     LLVM_FALLTHROUGH;
   // LDR_PRE LR, [SSPtrReg, #imm]! -> LDR_PRE LR, [SSPtrReg, #imm]!
-  //                                  MOVi16  R12, #0
-  //                                  STRi12  R12, [SSPtrReg, #0]
+  //                                  MOVi16  FreeReg, #0
+  //                                  STRi12  FreeReg, [SSPtrReg, #0]
   //
   //                               or LDR_PRE LR, [SSPtrReg, #imm]!
-  //                                  MOVi16  R12, #null-lo16
-  //                                  MOVTi16 R12, #null-hi16
-  //                                  STRi12  R12, [SSPtrReg, #0]
+  //                                  MOVi16  FreeReg, #null-lo16
+  //                                  MOVTi16 FreeReg, #null-hi16
+  //                                  STRi12  FreeReg, [SSPtrReg, #0]
   default:
     assert(MI.getOpcode() == ARM::t2LDR_PRE);
     assert(MI.getOperand(1).getReg() == ShadowStackPtrReg);
+    if (Spill) {
+      NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::tPUSH))
+                         .add(predOps(Pred, PredReg))
+                         .addReg(FreeReg));
+    }
     if (EnableRandezvousGRBG && !TrapBlocks.empty()) {
       uint64_t Idx = (*RNG)() % TrapBlocks.size();
       const BasicBlock * BB = TrapBlocks[Idx]->getBasicBlock();
       BlockAddress * BA = BlockAddress::get(const_cast<BasicBlock *>(BB));
-      NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::t2MOVi16), ARM::R12)
+      NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::t2MOVi16), FreeReg)
                          .addBlockAddress(BA, 0, ARMII::MO_LO16)
                          .add(predOps(Pred, PredReg)));
-      NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::t2MOVTi16), ARM::R12)
-                         .addReg(ARM::R12)
+      NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::t2MOVTi16), FreeReg)
+                         .addReg(FreeReg)
                          .addBlockAddress(BA, 0, ARMII::MO_HI16)
                          .add(predOps(Pred, PredReg)));
     } else {
-      NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::t2MOVi16), ARM::R12)
+      NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::t2MOVi16), FreeReg)
                          .addImm(0)
                          .add(predOps(Pred, PredReg)));
     }
     NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::t2STRi12))
-                       .addReg(ARM::R12)
+                       .addReg(FreeReg)
                        .addReg(ShadowStackPtrReg)
                        .addImm(0)
                        .add(predOps(Pred, PredReg)));
+    if (Spill) {
+      NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::tPOP))
+                         .add(predOps(Pred, PredReg))
+                         .addReg(FreeReg));
+    }
     insertInstsAfter(MI, NewInsts);
     break;
   }
