@@ -793,6 +793,7 @@ ARMRandezvousShadowStack::runOnModule(Module & M) {
   return changed;
 }
 
-ModulePass * llvm::createARMRandezvousShadowStack(void) {
+ModulePass *
+llvm::createARMRandezvousShadowStack(void) {
   return new ARMRandezvousShadowStack();
 }
