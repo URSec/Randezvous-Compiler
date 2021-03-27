@@ -760,6 +760,14 @@ ARMRandezvousInstrumentor::findFreeRegistersAfter(const MachineInstr & MI,
   // at the end of MBB
   UsedRegs.addLiveOuts(MBB);
 
+  // If there is a return, add registers used by the return as well; here the
+  // rationale is that, if MI is the return, MI will not be stepped over and
+  // therefore the (potentially live) registers used in MI would not be counted
+  MachineBasicBlock::const_iterator Terminator = MBB.getLastNonDebugInstr();
+  if (Terminator != MBB.end() && Terminator->isReturn()) {
+    UsedRegs.addUses(*Terminator);
+  }
+
   // Then move backward step by step to compute live registers after MI
   MachineBasicBlock::const_iterator MBBI(MI);
   MachineBasicBlock::const_iterator I = MBB.end();
@@ -782,6 +790,11 @@ ARMRandezvousInstrumentor::findFreeRegistersAfter(const MachineInstr & MI,
         for (auto CSR = MRI.getCalleeSavedRegs(); CSR && *CSR; ++CSR) {
           UsedRegs.addReg(*CSR);
         }
+
+        // Add registers used by the return; if MI is the return, MI will not
+        // be stepped over and therefore the (potentially live) registers used
+        // in MI would not be counted
+        UsedRegs.addUses(*I);
       }
     }
 
