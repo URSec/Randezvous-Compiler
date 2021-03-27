@@ -379,6 +379,11 @@ ARMRandezvousShadowStack::popFromShadowStack(MachineInstr & MI,
   switch (MI.getOpcode()) {
   case ARM::t2LDMIA_RET:
     MI.setDesc(TII->get(ARM::t2LDMIA_UPD));
+    NewInsts[1]->copyImplicitOps(MF, MI);
+    for (unsigned i = MI.getNumOperands() - 1, e = MI.getNumExplicitOperands();
+         i >= e; --i) {
+      MI.RemoveOperand(i);
+    }
     LLVM_FALLTHROUGH;
   case ARM::t2LDMIA_UPD:
     // LDMIA_UPD should load at least two registers; if it happens to be two,
@@ -402,6 +407,11 @@ ARMRandezvousShadowStack::popFromShadowStack(MachineInstr & MI,
 
   case ARM::tPOP_RET:
     MI.setDesc(TII->get(ARM::tPOP));
+    NewInsts[1]->copyImplicitOps(MF, MI);
+    for (unsigned i = MI.getNumOperands() - 1, e = MI.getNumExplicitOperands();
+         i >= e; --i) {
+      MI.RemoveOperand(i);
+    }
     LLVM_FALLTHROUGH;
   case ARM::tPOP:
     // POP should load at least one register; if it happens to be one, we just
