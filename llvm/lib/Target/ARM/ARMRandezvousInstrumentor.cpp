@@ -648,7 +648,7 @@ ARMRandezvousInstrumentor::encodeITMask(std::deque<bool> DQMask) {
 // Return value:
 //   A deque of free registers (might be empty, if none is found).
 //
-std::deque<unsigned>
+std::deque<Register>
 ARMRandezvousInstrumentor::findFreeRegistersBefore(const MachineInstr & MI,
                                                    bool Thumb) {
   assert(!MI.isDebugInstr() && "Cannot instrument debug instruction!");
@@ -704,14 +704,14 @@ ARMRandezvousInstrumentor::findFreeRegistersBefore(const MachineInstr & MI,
   const auto HiGPRs = {
     ARM::R8, ARM::R9, ARM::R10, ARM::R11, ARM::R12, ARM::LR,
   };
-  std::deque<unsigned> FreeRegs;
-  for (unsigned Reg : LoGPRs) {
+  std::deque<Register> FreeRegs;
+  for (Register Reg : LoGPRs) {
     if (!MRI.isReserved(Reg) && !UsedRegs.contains(Reg)) {
       FreeRegs.push_back(Reg);
     }
   }
   if (!Thumb) {
-    for (unsigned Reg : HiGPRs) {
+    for (Register Reg : HiGPRs) {
       if (!MRI.isReserved(Reg) && !UsedRegs.contains(Reg)) {
         FreeRegs.push_back(Reg);
       }
@@ -739,7 +739,7 @@ ARMRandezvousInstrumentor::findFreeRegistersBefore(const MachineInstr & MI,
 // Return value:
 //   A deque of free registers (might be empty, if none is found).
 //
-std::deque<unsigned>
+std::deque<Register>
 ARMRandezvousInstrumentor::findFreeRegistersAfter(const MachineInstr & MI,
                                                   bool Thumb) {
   assert(!MI.isDebugInstr() && "Cannot instrument debug instruction!");
@@ -810,14 +810,14 @@ ARMRandezvousInstrumentor::findFreeRegistersAfter(const MachineInstr & MI,
   const auto HiGPRs = {
     ARM::R8, ARM::R9, ARM::R10, ARM::R11, ARM::R12, ARM::LR,
   };
-  std::deque<unsigned> FreeRegs;
-  for (unsigned Reg : LoGPRs) {
+  std::deque<Register> FreeRegs;
+  for (Register Reg : LoGPRs) {
     if (!MRI.isReserved(Reg) && !UsedRegs.contains(Reg)) {
       FreeRegs.push_back(Reg);
     }
   }
   if (!Thumb) {
-    for (unsigned Reg : HiGPRs) {
+    for (Register Reg : HiGPRs) {
       if (!MRI.isReserved(Reg) && !UsedRegs.contains(Reg)) {
         FreeRegs.push_back(Reg);
       }

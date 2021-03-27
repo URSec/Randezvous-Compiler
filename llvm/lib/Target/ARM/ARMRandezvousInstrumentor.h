@@ -75,9 +75,9 @@ namespace llvm {
 
     MachineBasicBlock * splitBasicBlockAfter(MachineInstr & MI);
 
-    std::deque<unsigned> findFreeRegistersBefore(const MachineInstr & MI,
+    std::deque<Register> findFreeRegistersBefore(const MachineInstr & MI,
                                                  bool Thumb = false);
-    std::deque<unsigned> findFreeRegistersAfter(const MachineInstr & MI,
+    std::deque<Register> findFreeRegistersAfter(const MachineInstr & MI,
                                                 bool Thumb = false);
 
   private:
