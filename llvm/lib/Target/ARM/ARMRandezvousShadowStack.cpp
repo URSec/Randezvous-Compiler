@@ -592,8 +592,9 @@ ARMRandezvousShadowStack::nullifyReturnAddress(MachineInstr & MI,
   //                                  MOVTi16 FreeReg, #null-hi16
   //                                  STRi12  FreeReg, [SSPtrReg, #0]
   default:
-    assert(MI.getOpcode() == ARM::t2LDR_PRE);
-    assert(MI.getOperand(1).getReg() == ShadowStackPtrReg);
+    assert(MI.getOpcode() == ARM::t2LDR_PRE && "Unrecognized POP!");
+    assert(MI.getOperand(1).getReg() == ShadowStackPtrReg && "Buggy POP!");
+    assert(PCLR.getReg() == ARM::LR && "Buggy POP!");
     if (Spill) {
       NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::tPUSH))
                          .add(predOps(Pred, PredReg))
@@ -680,7 +681,7 @@ ARMRandezvousShadowStack::runOnModule(Module & M) {
   }
 
   if (EnableRandezvousShadowStack) {
-    assert((RandezvousShadowStackStrideLength > 0 &&
+    assert((RandezvousShadowStackStrideLength > 2 &&
             RandezvousShadowStackStrideLength <= 32) && "Invalid stride length!");
 
     // Create and initialize a global variable for the shadow stack
