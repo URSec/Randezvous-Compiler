@@ -15,14 +15,6 @@
 #define ARM_RANDEZVOUS_INSTRUMENTOR
 
 #include "ARMBaseInstrInfo.h"
-#include "llvm/CodeGen/LivePhysRegs.h"
-#include "llvm/CodeGen/MachineFunction.h"
-#include "llvm/CodeGen/MachineBasicBlock.h"
-#include "llvm/CodeGen/MachineInstr.h"
-#include "llvm/CodeGen/TargetInstrInfo.h"
-#include "llvm/CodeGen/TargetSubtargetInfo.h"
-
-#include <deque>
 
 namespace llvm {
   //====================================================================
