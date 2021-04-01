@@ -63,7 +63,7 @@ ARMRandezvousCLR::shuffleMachineBasicBlocks(MachineFunction & MF) {
 
   // Add an unconditional branch to all MachineBasicBlocks that fall through so
   // that we can safely take them apart from their fall-through blocks
-  std::deque<MachineBasicBlock *> MBBs;
+  std::vector<MachineBasicBlock *> MBBs;
   const TargetInstrInfo * TII = MF.getSubtarget().getInstrInfo();
   for (MachineBasicBlock & MBB : MF) {
     MachineBasicBlock * FallThruMBB = MBB.getFallThrough();
@@ -121,7 +121,7 @@ ARMRandezvousCLR::insertTrapBlocks(Function & F, MachineFunction & MF,
   //
 
   // Determine where to insert trap instructions
-  std::deque<MachineBasicBlock *> InsertionPts;
+  std::vector<MachineBasicBlock *> InsertionPts;
   for (MachineBasicBlock & MBB : MF) {
     if (!MBB.canFallThrough()) {
       InsertionPts.push_back(&MBB);
@@ -130,7 +130,7 @@ ARMRandezvousCLR::insertTrapBlocks(Function & F, MachineFunction & MF,
 
   // Determine the numbers of trap instructions to insert at each point
   uint64_t SumShares = 0;
-  std::deque<uint64_t> Shares(InsertionPts.size());
+  std::vector<uint64_t> Shares(InsertionPts.size());
   for (uint64_t i = 0; i < InsertionPts.size(); ++i) {
     Shares[i] = (*RNG)() & 0xffffffff; // Prevent overflow
     SumShares += Shares[i];
@@ -190,7 +190,7 @@ ARMRandezvousCLR::runOnModule(Module & M) {
   // First, shuffle the order of basic blocks in each function (if requested)
   // and calculate how much space existing functions have taken up
   uint64_t TotalTextSize = 0;
-  std::deque<std::tuple<Function *, MachineFunction *> > Functions;
+  std::vector<std::pair<Function *, MachineFunction *> > Functions;
   for (Function & F : M) {
     MachineFunction * MF = MMI.getMachineFunction(F);
     if (MF == nullptr) {
@@ -203,7 +203,7 @@ ARMRandezvousCLR::runOnModule(Module & M) {
 
     uint64_t TextSize = getFunctionCodeSize(*MF);
     if (TextSize != 0) {
-      Functions.push_back(std::make_tuple(&F, MF));
+      Functions.push_back(std::make_pair(&F, MF));
       TotalTextSize += TextSize;
     }
   }
@@ -215,16 +215,16 @@ ARMRandezvousCLR::runOnModule(Module & M) {
   SymbolTableList<Function> & FunctionList = M.getFunctionList();
   llvm::shuffle(Functions.begin(), Functions.end(), *RNG);
   for (auto & FMF : Functions) {
-    FunctionList.remove(std::get<0>(FMF));
+    FunctionList.remove(FMF.first);
   }
   for (auto & FMF : Functions) {
-    FunctionList.push_back(std::get<0>(FMF));
+    FunctionList.push_back(FMF.first);
   }
 
   // Third, determine the numbers of trap instructions to insert
   uint64_t NumTrapInsts = (RandezvousMaxTextSize - TotalTextSize) / 2;
   uint64_t SumShares = 0;
-  std::deque<uint64_t> Shares(Functions.size());
+  std::vector<uint64_t> Shares(Functions.size());
   for (uint64_t i = 0; i < Functions.size(); ++i) {
     Shares[i] = (*RNG)() & 0xffffffff; // Prevent overflow
     SumShares += Shares[i];
@@ -235,8 +235,7 @@ ARMRandezvousCLR::runOnModule(Module & M) {
 
   // Lastly, insert trap instructions into each function
   for (uint64_t i = 0; i < Functions.size(); ++i) {
-    insertTrapBlocks(*std::get<0>(Functions[i]), *std::get<1>(Functions[i]),
-                     Shares[i]);
+    insertTrapBlocks(*Functions[i].first, *Functions[i].second, Shares[i]);
   }
 
   return true;

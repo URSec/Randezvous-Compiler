@@ -129,8 +129,7 @@ ARMRandezvousInstrumentor::findIT(const MachineInstr & MI, unsigned & distance) 
 void
 ARMRandezvousInstrumentor::insertInstBefore(MachineInstr & MI,
                                             MachineInstr * Inst) {
-  std::deque<MachineInstr *> Insts { Inst };
-  insertInstsBefore(MI, Insts);
+  insertInstsBefore(MI, { Inst });
 }
 
 //
@@ -148,26 +147,25 @@ ARMRandezvousInstrumentor::insertInstBefore(MachineInstr & MI,
 void
 ARMRandezvousInstrumentor::insertInstAfter(MachineInstr & MI,
                                            MachineInstr * Inst) {
-  std::deque<MachineInstr *> Insts { Inst };
-  insertInstsAfter(MI, Insts);
+  insertInstsAfter(MI, { Inst });
 }
 
 //
 // Method: insertInstsBefore()
 //
 // Description:
-//   This method inserts a group of instructions contained in a deque before a
+//   This method inserts a group of instructions contained in an array before a
 //   given instruction MI.  If MI is a predicated instruction within an IT
 //   block, then the new instructions will have the same predicate as MI and
 //   also end up in one or more IT blocks.
 //
 // Inputs:
 //   MI    - A reference to an instruction before which to insert instructions.
-//   Insts - A reference to a deque containing the instructions.
+//   Insts - A reference to an array containing the instructions.
 //
 void
 ARMRandezvousInstrumentor::insertInstsBefore(MachineInstr & MI,
-                                             std::deque<MachineInstr *> & Insts) {
+                                             ArrayRef<MachineInstr *> Insts) {
   assert(!MI.isDebugInstr() && "Cannot instrument debug instruction!");
 
   MachineFunction & MF = *MI.getMF();
@@ -249,18 +247,18 @@ ARMRandezvousInstrumentor::insertInstsBefore(MachineInstr & MI,
 // Method: insertInstsAfter()
 //
 // Description:
-//   This method inserts a group of instructions contained in a deque after a
+//   This method inserts a group of instructions contained in an array after a
 //   given instruction MI.  If MI is a predicated instruction within an IT
 //   block, then the new instructions will have the same predicate as MI and
 //   also end up in one or more IT blocks.
 //
 // Inputs:
 //   MI    - A reference to an instruction after which to insert instructions.
-//   Insts - A reference to a deque containing the instructions.
+//   Insts - A reference to an array containing the instructions.
 //
 void
 ARMRandezvousInstrumentor::insertInstsAfter(MachineInstr & MI,
-                                            std::deque<MachineInstr *> & Insts) {
+                                            ArrayRef<MachineInstr *> Insts) {
   assert(!MI.isDebugInstr() && "Cannot instrument debug instruction!");
 
   MachineFunction & MF = *MI.getMF();
@@ -646,9 +644,9 @@ ARMRandezvousInstrumentor::encodeITMask(std::deque<bool> DQMask) {
 //           R0 -- R12 and LR).
 //
 // Return value:
-//   A deque of free registers (might be empty, if none is found).
+//   A vector of free registers (might be empty, if none is found).
 //
-std::deque<Register>
+std::vector<Register>
 ARMRandezvousInstrumentor::findFreeRegistersBefore(const MachineInstr & MI,
                                                    bool Thumb) {
   assert(!MI.isDebugInstr() && "Cannot instrument debug instruction!");
@@ -704,7 +702,7 @@ ARMRandezvousInstrumentor::findFreeRegistersBefore(const MachineInstr & MI,
   const auto HiGPRs = {
     ARM::R8, ARM::R9, ARM::R10, ARM::R11, ARM::R12, ARM::LR,
   };
-  std::deque<Register> FreeRegs;
+  std::vector<Register> FreeRegs;
   for (Register Reg : LoGPRs) {
     if (!MRI.isReserved(Reg) && !UsedRegs.contains(Reg)) {
       FreeRegs.push_back(Reg);
@@ -737,9 +735,9 @@ ARMRandezvousInstrumentor::findFreeRegistersBefore(const MachineInstr & MI,
 //           R0 -- R12 and LR).
 //
 // Return value:
-//   A deque of free registers (might be empty, if none is found).
+//   A vector of free registers (might be empty, if none is found).
 //
-std::deque<Register>
+std::vector<Register>
 ARMRandezvousInstrumentor::findFreeRegistersAfter(const MachineInstr & MI,
                                                   bool Thumb) {
   assert(!MI.isDebugInstr() && "Cannot instrument debug instruction!");
@@ -810,7 +808,7 @@ ARMRandezvousInstrumentor::findFreeRegistersAfter(const MachineInstr & MI,
   const auto HiGPRs = {
     ARM::R8, ARM::R9, ARM::R10, ARM::R11, ARM::R12, ARM::LR,
   };
-  std::deque<Register> FreeRegs;
+  std::vector<Register> FreeRegs;
   for (Register Reg : LoGPRs) {
     if (!MRI.isReserved(Reg) && !UsedRegs.contains(Reg)) {
       FreeRegs.push_back(Reg);

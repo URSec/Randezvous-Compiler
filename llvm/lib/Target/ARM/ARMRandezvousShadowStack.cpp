@@ -268,7 +268,7 @@ ARMRandezvousShadowStack::pushToShadowStack(MachineInstr & MI,
   //
   // STR_POST LR, [SSPtrReg], #Stride
   // ADDrr    SSPtrReg, SSPtrReg, SSStrideReg
-  std::deque<MachineInstr *> NewInsts;
+  std::vector<MachineInstr *> NewInsts;
   NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::t2STR_POST), ShadowStackPtrReg)
                      .addReg(ARM::LR)
                      .addReg(ShadowStackPtrReg)
@@ -357,7 +357,7 @@ ARMRandezvousShadowStack::popFromShadowStack(MachineInstr & MI,
   //
   // SUBrr    SSPtrReg, SSPtrReg, SSStrideReg
   // LDR_PRE  PC/LR, [SSPtrReg, #-Stride]!
-  std::deque<MachineInstr *> NewInsts;
+  std::vector<MachineInstr *> NewInsts;
   NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::t2SUBrr), ShadowStackPtrReg)
                      .addReg(ShadowStackPtrReg)
                      .addReg(ShadowStackStrideReg)
@@ -477,11 +477,11 @@ ARMRandezvousShadowStack::nullifyReturnAddress(MachineInstr & MI,
 
   // We need to use a scratch register as the source register of a store.  If
   // no free register is around, spill and use R4.
-  std::deque<Register> FreeRegs = findFreeRegistersAfter(MI);
+  std::vector<Register> FreeRegs = findFreeRegistersAfter(MI);
   bool Spill = FreeRegs.empty();
   Register FreeReg = Spill ? ARM::R4 : FreeRegs[0];
 
-  std::deque<MachineInstr *> NewInsts;
+  std::vector<MachineInstr *> NewInsts;
   switch (MI.getOpcode()) {
   // LDMIA_RET SP!, {..., PC} -> LDMIA_UPD SP!, {..., LR}
   //                             MOVi16    FreeReg, #0
@@ -704,8 +704,8 @@ ARMRandezvousShadowStack::runOnModule(Module & M) {
 
     // Find out all pushes that write LR to the stack and all pops that read a
     // return address from the stack to LR or PC
-    std::deque<std::tuple<MachineInstr *, MachineOperand *> > Pushes;
-    std::deque<std::tuple<MachineInstr *, MachineOperand *> > Pops;
+    std::vector<std::pair<MachineInstr *, MachineOperand *> > Pushes;
+    std::vector<std::pair<MachineInstr *, MachineOperand *> > Pops;
     for (MachineBasicBlock & MBB : *MF) {
       for (MachineInstr & MI : MBB) {
         switch (MI.getOpcode()) {
@@ -721,7 +721,7 @@ ARMRandezvousShadowStack::runOnModule(Module & M) {
           if (MI.getFlag(MachineInstr::FrameSetup)) {
             for (MachineOperand & MO : MI.explicit_operands()) {
               if (MO.isReg() && MO.getReg() == ARM::LR) {
-                Pushes.push_back(std::make_tuple(&MI, &MO));
+                Pushes.push_back(std::make_pair(&MI, &MO));
                 break;
               }
             }
@@ -747,7 +747,7 @@ ARMRandezvousShadowStack::runOnModule(Module & M) {
             for (MachineOperand & MO : MI.explicit_operands()) {
               if (MO.isReg()) {
                 if (MO.getReg() == ARM::LR || MO.getReg() == ARM::PC) {
-                  Pops.push_back(std::make_tuple(&MI, &MO));
+                  Pops.push_back(std::make_pair(&MI, &MO));
                   break;
                 }
               }
@@ -772,20 +772,14 @@ ARMRandezvousShadowStack::runOnModule(Module & M) {
       Stride &= 0xfful;
 
       for (auto & MIMO : Pushes) {
-        MachineInstr * MI = std::get<0>(MIMO);
-        MachineOperand * MO = std::get<1>(MIMO);
-        changed |= pushToShadowStack(*MI, *MO, Stride);
+        changed |= pushToShadowStack(*MIMO.first, *MIMO.second, Stride);
       }
       for (auto & MIMO : Pops) {
-        MachineInstr * MI = std::get<0>(MIMO);
-        MachineOperand * MO = std::get<1>(MIMO);
-        changed |= popFromShadowStack(*MI, *MO, Stride);
+        changed |= popFromShadowStack(*MIMO.first, *MIMO.second, Stride);
       }
     } else if (EnableRandezvousRAN) {
       for (auto & MIMO : Pops) {
-        MachineInstr * MI = std::get<0>(MIMO);
-        MachineOperand * MO = std::get<1>(MIMO);
-        changed |= nullifyReturnAddress(*MI, *MO);
+        changed |= nullifyReturnAddress(*MIMO.first, *MIMO.second);
       }
     }
   }

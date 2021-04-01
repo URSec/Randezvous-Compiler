@@ -63,11 +63,9 @@ namespace llvm {
 
     void insertInstAfter(MachineInstr & MI, MachineInstr * Inst);
 
-    void insertInstsBefore(MachineInstr & MI,
-                           std::deque<MachineInstr *> & Insts);
+    void insertInstsBefore(MachineInstr & MI, ArrayRef<MachineInstr *> Insts);
 
-    void insertInstsAfter(MachineInstr & MI,
-                          std::deque<MachineInstr *> & Insts);
+    void insertInstsAfter(MachineInstr & MI, ArrayRef<MachineInstr *> Insts);
 
     void removeInst(MachineInstr & MI);
 
@@ -75,10 +73,10 @@ namespace llvm {
 
     MachineBasicBlock * splitBasicBlockAfter(MachineInstr & MI);
 
-    std::deque<Register> findFreeRegistersBefore(const MachineInstr & MI,
+    std::vector<Register> findFreeRegistersBefore(const MachineInstr & MI,
+                                                  bool Thumb = false);
+    std::vector<Register> findFreeRegistersAfter(const MachineInstr & MI,
                                                  bool Thumb = false);
-    std::deque<Register> findFreeRegistersAfter(const MachineInstr & MI,
-                                                bool Thumb = false);
 
   private:
     unsigned getITBlockSize(const MachineInstr & IT);

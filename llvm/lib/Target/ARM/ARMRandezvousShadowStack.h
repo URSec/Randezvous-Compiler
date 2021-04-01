@@ -35,7 +35,7 @@ namespace llvm {
 
   private:
     std::unique_ptr<RandomNumberGenerator> RNG;
-    std::deque<MachineBasicBlock *> TrapBlocks;
+    std::vector<MachineBasicBlock *> TrapBlocks;
 
     GlobalVariable * createShadowStack(Module & M);
     Function * createInitFunction(Module & M, GlobalVariable & SS);
