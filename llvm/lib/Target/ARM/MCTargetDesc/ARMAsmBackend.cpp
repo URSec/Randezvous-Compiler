@@ -108,6 +108,8 @@ const MCFixupKindInfo &ARMAsmBackend::getFixupKindInfo(MCFixupKind Kind) const {
       {"fixup_arm_movw_lo16", 0, 20, 0},
       {"fixup_t2_movt_hi16", 0, 20, 0},
       {"fixup_t2_movw_lo16", 0, 20, 0},
+      {"fixup_t2_udf_hi16", 0, 20, 0},
+      {"fixup_t2_udf_lo16", 0, 20, 0},
       {"fixup_arm_mod_imm", 0, 12, 0},
       {"fixup_t2_so_imm", 0, 26, 0},
       {"fixup_bf_branch", 0, 32, MCFixupKindInfo::FKF_IsPCRel},
@@ -162,6 +164,8 @@ const MCFixupKindInfo &ARMAsmBackend::getFixupKindInfo(MCFixupKind Kind) const {
       {"fixup_arm_movw_lo16", 12, 20, 0},
       {"fixup_t2_movt_hi16", 12, 20, 0},
       {"fixup_t2_movw_lo16", 12, 20, 0},
+      {"fixup_t2_udf_hi16", 12, 20, 0},
+      {"fixup_t2_udf_lo16", 12, 20, 0},
       {"fixup_arm_mod_imm", 20, 12, 0},
       {"fixup_t2_so_imm", 26, 6, 0},
       {"fixup_bf_branch", 0, 32, MCFixupKindInfo::FKF_IsPCRel},
@@ -436,7 +440,8 @@ unsigned ARMAsmBackend::adjustFixupValue(const MCAssembler &Asm,
         A->getSymbol().isExternal() &&
         (Kind == FK_Data_4 || Kind == ARM::fixup_arm_movw_lo16 ||
          Kind == ARM::fixup_arm_movt_hi16 || Kind == ARM::fixup_t2_movw_lo16 ||
-         Kind == ARM::fixup_t2_movt_hi16))
+         Kind == ARM::fixup_t2_movt_hi16 || Kind == ARM::fixup_t2_udf_lo16 ||
+         Kind == ARM::fixup_t2_udf_hi16))
       Value |= 1;
   }
 
@@ -464,6 +469,19 @@ unsigned ARMAsmBackend::adjustFixupValue(const MCAssembler &Asm,
     // inst{11-0} = Lo12;
     Value = (Hi4 << 16) | (Lo12);
     return Value;
+  }
+  case ARM::fixup_t2_udf_hi16:
+    assert(STI != nullptr);
+    if (IsResolved || !STI->getTargetTriple().isOSBinFormatELF())
+      Value >>= 16;
+    LLVM_FALLTHROUGH;
+  case ARM::fixup_t2_udf_lo16: {
+    unsigned Hi4 = (Value & 0xF000) >> 12;
+    unsigned Lo12 = Value & 0x0FFF;
+    // inst{19-16} = Hi4;
+    // inst{11-0} = Lo12;
+    Value = (Hi4 << 16) | (Lo12);
+    return swapHalfWords(Value, Endian == support::little);
   }
   case ARM::fixup_t2_movt_hi16:
     assert(STI != nullptr);
@@ -957,6 +975,8 @@ static unsigned getFixupKindNumBytes(unsigned Kind) {
   case ARM::fixup_arm_movw_lo16:
   case ARM::fixup_t2_movt_hi16:
   case ARM::fixup_t2_movw_lo16:
+  case ARM::fixup_t2_udf_hi16:
+  case ARM::fixup_t2_udf_lo16:
   case ARM::fixup_t2_so_imm:
   case ARM::fixup_bf_branch:
   case ARM::fixup_bf_target:
@@ -1017,6 +1037,8 @@ static unsigned getFixupKindContainerSizeBytes(unsigned Kind) {
   case ARM::fixup_arm_movw_lo16:
   case ARM::fixup_t2_movt_hi16:
   case ARM::fixup_t2_movw_lo16:
+  case ARM::fixup_t2_udf_hi16:
+  case ARM::fixup_t2_udf_lo16:
   case ARM::fixup_arm_mod_imm:
   case ARM::fixup_t2_so_imm:
   case ARM::fixup_bf_branch:

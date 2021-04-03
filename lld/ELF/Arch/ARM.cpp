@@ -630,6 +630,16 @@ void ARM::relocate(uint8_t *loc, const Relocation &rel, uint64_t val) const {
                   ((val << 4) & 0x7000) |    // imm3
                   (val & 0x00ff));           // imm8
     break;
+  case R_ARM_PRIVATE_14:
+    // Encoding T2: A = imm4:imm12
+    write16le(loc, (read16le(loc) & ~0x000f) | ((val >> 28) & 0x000f));
+    write16le(loc + 2, (read16le(loc + 2) & ~0x0fff) | ((val >> 16) & 0x0fff));
+    break;
+  case R_ARM_PRIVATE_15:
+    // Encoding T2: A = imm4:imm12
+    write16le(loc, (read16le(loc) & ~0x000f) | ((val >> 12) & 0x000f));
+    write16le(loc + 2, (read16le(loc + 2) & ~0x0fff) | (val & 0x0fff));
+    break;
   case R_ARM_ALU_PC_G0: {
     // ADR (literal) add = bit23, sub = bit22
     // literal is a 12-bit modified immediate, made up of a 4-bit even rotate
