@@ -149,7 +149,7 @@ ARMRandezvousCLR::insertTrapBlocks(Function & F, MachineFunction & MF,
 
       // Build a machine IR basic block
       MachineBasicBlock * MBB = MF.CreateMachineBasicBlock(BB);
-      BuildMI(MBB, DebugLoc(), TII->get(ARM::tTRAP));
+      BuildMI(MBB, DebugLoc(), TII->get(ARM::t2UDF_ga)).addImm(0);
       MF.push_back(MBB);
       MBB->moveAfter(InsertionPts[i]);
       MBB->setHasAddressTaken();
@@ -222,7 +222,7 @@ ARMRandezvousCLR::runOnModule(Module & M) {
   }
 
   // Third, determine the numbers of trap instructions to insert
-  uint64_t NumTrapInsts = (RandezvousMaxTextSize - TotalTextSize) / 2;
+  uint64_t NumTrapInsts = (RandezvousMaxTextSize - TotalTextSize) / 4;
   uint64_t SumShares = 0;
   std::vector<uint64_t> Shares(Functions.size());
   for (uint64_t i = 0; i < Functions.size(); ++i) {
