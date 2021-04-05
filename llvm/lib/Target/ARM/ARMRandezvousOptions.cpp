@@ -136,7 +136,7 @@ ShadowStackSize("arm-randezvous-shadow-stack-size",
                 cl::Hidden,
                 cl::desc("ARM Randezvous Shadow Stack size in bytes"),
                 cl::location(RandezvousShadowStackSize),
-                cl::init(0x40000));   // 256 KB
+                cl::init(0x8000)); // 32 KB
 
 //===----------------------------------------------------------------------===//
 // Miscellaneous options used by Randezvous passes
