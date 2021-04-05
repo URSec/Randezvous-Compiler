@@ -13,6 +13,7 @@
 #include "ARM.h"
 #include "ARMMacroFusion.h"
 #include "ARMRandezvousCLR.h"
+#include "ARMRandezvousGDLR.h"
 #include "ARMRandezvousLGPromote.h"
 #include "ARMRandezvousShadowStack.h"
 #include "ARMSubtarget.h"
@@ -564,6 +565,7 @@ void ARMPassConfig::addPreEmitPass2() {
   // Add Randezvous passes
   addPass(createARMRandezvousCLR());
   addPass(createARMRandezvousShadowStack());
+  addPass(createARMRandezvousGDLR());
 
   addPass(createARMConstantIslandPass());
   addPass(createARMLowOverheadLoopsPass());

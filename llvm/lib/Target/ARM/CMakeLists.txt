@@ -19,6 +19,7 @@ add_public_tablegen_target(ARMCommonTableGen)
 
 set(ARMRandezvous_SOURCES
   ARMRandezvousCLR.cpp
+  ARMRandezvousGDLR.cpp
   ARMRandezvousInstrumentor.cpp
   ARMRandezvousLGPromote.cpp
   ARMRandezvousOptions.cpp

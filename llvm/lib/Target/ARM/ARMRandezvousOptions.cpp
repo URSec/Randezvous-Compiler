@@ -34,6 +34,14 @@ BBLR("arm-randezvous-bblr",
      cl::location(EnableRandezvousBBLR),
      cl::init(false));
 
+bool EnableRandezvousGDLR;
+static cl::opt<bool, true>
+GDLR("arm-randezvous-gdlr",
+     cl::Hidden,
+     cl::desc("Enable ARM Randezvous Global Data Layout Randomization"),
+     cl::location(EnableRandezvousGDLR),
+     cl::init(false));
+
 bool EnableRandezvousGRBG;
 static cl::opt<bool, true>
 GRBG("arm-randezvous-grbg",
@@ -70,6 +78,14 @@ CLRSeed("arm-randezvous-clr-seed",
         cl::location(RandezvousCLRSeed),
         cl::init(0));
 
+uint64_t RandezvousGDLRSeed;
+static cl::opt<uint64_t, true>
+GDLRSeed("arm-randezvous-gdlr-seed",
+         cl::Hidden,
+         cl::desc("Seed for the RNG used in ARM Randezvous GDLR"),
+         cl::location(RandezvousGDLRSeed),
+         cl::init(0));
+
 uint64_t RandezvousShadowStackSeed;
 static cl::opt<uint64_t, true>
 ShadowStackSeed("arm-randezvous-shadow-stack-seed",
@@ -89,6 +105,30 @@ MaxTextSize("arm-randezvous-max-text-size",
             cl::desc("Maximum text section size in bytes"),
             cl::location(RandezvousMaxTextSize),
             cl::init(0x1e0000));   // 2 MB - 128 KB
+
+size_t RandezvousMaxRodataSize;
+static cl::opt<size_t, true>
+MaxRodataSize("arm-randezvous-max-rodata-size",
+              cl::Hidden,
+              cl::desc("Maximum rodata section size in bytes"),
+              cl::location(RandezvousMaxRodataSize),
+              cl::init(0x10000));  // 64 KB
+
+size_t RandezvousMaxDataSize;
+static cl::opt<size_t, true>
+MaxDataSize("arm-randezvous-max-data-size",
+            cl::Hidden,
+            cl::desc("Maximum data section size in bytes"),
+            cl::location(RandezvousMaxDataSize),
+            cl::init(0x10000));    // 64 KB
+
+size_t RandezvousMaxBssSize;
+static cl::opt<size_t, true>
+MaxBssSize("arm-randezvous-max-bss-size",
+           cl::Hidden,
+           cl::desc("Maximum bss section size in bytes"),
+           cl::location(RandezvousMaxBssSize),
+           cl::init(0x10000));     // 64 KB
 
 size_t RandezvousShadowStackSize;
 static cl::opt<size_t, true>

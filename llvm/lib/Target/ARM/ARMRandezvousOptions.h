@@ -21,6 +21,7 @@
 
 extern bool EnableRandezvousCLR;
 extern bool EnableRandezvousBBLR;
+extern bool EnableRandezvousGDLR;
 extern bool EnableRandezvousGRBG;
 extern bool EnableRandezvousShadowStack;
 extern bool EnableRandezvousRAN;
@@ -30,6 +31,7 @@ extern bool EnableRandezvousRAN;
 //===----------------------------------------------------------------------===//
 
 extern uint64_t RandezvousCLRSeed;
+extern uint64_t RandezvousGDLRSeed;
 extern uint64_t RandezvousShadowStackSeed;
 
 //===----------------------------------------------------------------------===//
@@ -37,6 +39,9 @@ extern uint64_t RandezvousShadowStackSeed;
 //===----------------------------------------------------------------------===//
 
 extern size_t RandezvousMaxTextSize;
+extern size_t RandezvousMaxRodataSize;
+extern size_t RandezvousMaxDataSize;
+extern size_t RandezvousMaxBssSize;
 extern size_t RandezvousShadowStackSize;
 
 //===----------------------------------------------------------------------===//
