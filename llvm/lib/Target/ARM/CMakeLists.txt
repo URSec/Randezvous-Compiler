@@ -23,6 +23,7 @@ set(ARMRandezvous_SOURCES
   ARMRandezvousInstrumentor.cpp
   ARMRandezvousLGPromote.cpp
   ARMRandezvousOptions.cpp
+  ARMRandezvousPicoXOM.cpp
   ARMRandezvousShadowStack.cpp
 )
 

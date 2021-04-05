@@ -15,6 +15,7 @@
 #include "ARMRandezvousCLR.h"
 #include "ARMRandezvousGDLR.h"
 #include "ARMRandezvousLGPromote.h"
+#include "ARMRandezvousPicoXOM.h"
 #include "ARMRandezvousShadowStack.h"
 #include "ARMSubtarget.h"
 #include "ARMTargetObjectFile.h"
@@ -434,8 +435,9 @@ void ARMPassConfig::addIRPasses() {
   if (TM->getTargetTriple().isOSWindows())
     addPass(createCFGuardCheckPass());
 
-  // Add Randezvous Local To Global Function Pointer Promotion pass
+  // Add Randezvous IR passes
   addPass(createARMRandezvousLGPromote());
+  addPass(createARMRandezvousPicoXOM());
 }
 
 void ARMPassConfig::addCodeGenPrepare() {
@@ -562,7 +564,7 @@ void ARMPassConfig::addPreEmitPass() {
 }
 
 void ARMPassConfig::addPreEmitPass2() {
-  // Add Randezvous passes
+  // Add Randezvous CodeGen passes
   addPass(createARMRandezvousCLR());
   addPass(createARMRandezvousShadowStack());
   addPass(createARMRandezvousGDLR());

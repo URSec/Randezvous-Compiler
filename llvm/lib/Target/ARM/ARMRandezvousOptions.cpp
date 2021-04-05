@@ -34,6 +34,14 @@ BBLR("arm-randezvous-bblr",
      cl::location(EnableRandezvousBBLR),
      cl::init(false));
 
+bool EnableRandezvousPicoXOM;
+static cl::opt<bool, true>
+PicoXOM("arm-randezvous-picoxom",
+        cl::Hidden,
+        cl::desc("Enable ARM Randezvous Execute-Only Memory"),
+        cl::location(EnableRandezvousPicoXOM),
+        cl::init(false));
+
 bool EnableRandezvousGDLR;
 static cl::opt<bool, true>
 GDLR("arm-randezvous-gdlr",
