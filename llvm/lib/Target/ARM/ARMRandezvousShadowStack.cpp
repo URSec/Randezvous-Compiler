@@ -84,7 +84,7 @@ ARMRandezvousShadowStack::createShadowStack(Module & M) {
     if (EnableRandezvousGRBG && !TrapBlocks.empty()) {
       // Initialize the shadow stack with a random array of trap block
       // addresses
-      SmallVector<Constant *, 0> SSInitArray;
+      std::vector<Constant *> SSInitArray;
       for (unsigned i = 0; i < SSTy->getNumElements(); ++i) {
         uint64_t Idx = (*RNG)() % TrapBlocks.size();
         const BasicBlock * BB = TrapBlocks[Idx]->getBasicBlock();

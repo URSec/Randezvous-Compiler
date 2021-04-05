@@ -83,7 +83,7 @@ ARMRandezvousGDLR::insertGarbageObjects(GlobalVariable & GV,
     Initializer = Constant::getNullValue(GarbageObjectTy);
   } else if (EnableRandezvousGRBG && !TrapBlocks.empty()) {
     // Initialize the garbage object with addresses of random trap blocks
-    SmallVector<Constant *, 0> InitArray;
+    std::vector<Constant *> InitArray;
     for (uint64_t i = 0; i < NumGarbageObjects; ++i) {
       uint64_t Idx = (*RNG)() % TrapBlocks.size();
       const BasicBlock * BB = TrapBlocks[Idx]->getBasicBlock();
@@ -93,7 +93,7 @@ ARMRandezvousGDLR::insertGarbageObjects(GlobalVariable & GV,
   } else {
     // Initialize the garbage object with random values that have the LSB
     // set; this serves as the Thumb bit
-    SmallVector<Constant *, 0> InitArray;
+    std::vector<Constant *> InitArray;
     for (uint64_t i = 0; i < NumGarbageObjects; ++i) {
       InitArray.push_back(Constant::getIntegerValue(BlockAddrTy,
                                                     APInt(8 * PtrSize,
