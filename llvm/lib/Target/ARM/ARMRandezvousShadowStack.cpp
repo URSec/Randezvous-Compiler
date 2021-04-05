@@ -157,9 +157,12 @@ ARMRandezvousShadowStack::createInitFunction(Module & M, GlobalVariable & SS) {
     IRB.CreateRetVoid(); // At this point, what the IR basic block contains
                          // doesn't matter so just place a return there
 
-    // Build a machine IR basic block
+    // Build machine IR basic block(s)
     const TargetInstrInfo * TII = MF.getSubtarget().getInstrInfo();
     MachineBasicBlock * MBB = MF.CreateMachineBasicBlock(BB);
+    MachineBasicBlock * MBB2 = nullptr;
+    MachineBasicBlock * MBB3 = nullptr;
+    MachineBasicBlock * RetMBB = MBB;
     MF.push_back(MBB);
     // MOVi16 SSPtrReg, @SS_lo
     BuildMI(MBB, DebugLoc(), TII->get(ARM::t2MOVi16), ShadowStackPtrReg)
@@ -189,21 +192,41 @@ ARMRandezvousShadowStack::createInitFunction(Module & M, GlobalVariable & SS) {
         .addImm((RandezvousRNGAddress >> 16) & 0xffff)
         .add(predOps(ARMCC::AL));
       }
+
+      MBB2 = MF.CreateMachineBasicBlock(BB);
+      MF.push_back(MBB2);
+      MBB->addSuccessor(MBB2);
+      MBB2->addSuccessor(MBB2);
       // LDRi12 SSStrideReg, [R0, #0]
-      BuildMI(MBB, DebugLoc(), TII->get(ARM::t2LDRi12), ShadowStackStrideReg)
+      BuildMI(MBB2, DebugLoc(), TII->get(ARM::t2LDRi12), ShadowStackStrideReg)
       .addReg(ARM::R0)
       .addImm(0)
       .add(predOps(ARMCC::AL));
+      // CMPi8 SSStrideReg, #0
+      BuildMI(MBB2, DebugLoc(), TII->get(ARM::t2CMPri))
+      .addReg(ShadowStackStrideReg)
+      .addImm(0)
+      .add(predOps(ARMCC::AL));
+      // BEQ MBB2
+      BuildMI(MBB2, DebugLoc(), TII->get(ARM::t2Bcc))
+      .addMBB(MBB2)
+      .addImm(ARMCC::EQ)
+      .addReg(ARM::CPSR, RegState::Kill);
+
+      MBB3 = MF.CreateMachineBasicBlock(BB);
+      MF.push_back(MBB3);
+      MBB2->addSuccessor(MBB3);
       // BFC SSStrideReg, #(SSStrideLength - 1), #(33 - SSStrideLength)
-      BuildMI(MBB, DebugLoc(), TII->get(ARM::t2BFC), ShadowStackStrideReg)
+      BuildMI(MBB3, DebugLoc(), TII->get(ARM::t2BFC), ShadowStackStrideReg)
       .addReg(ShadowStackStrideReg)
       .addImm((1 << (RandezvousShadowStackStrideLength - 1)) - 1)
       .add(predOps(ARMCC::AL));
       // BFC SSStrideReg, #0, #2
-      BuildMI(MBB, DebugLoc(), TII->get(ARM::t2BFC), ShadowStackStrideReg)
+      BuildMI(MBB3, DebugLoc(), TII->get(ARM::t2BFC), ShadowStackStrideReg)
       .addReg(ShadowStackStrideReg)
       .addImm(~0x3)
       .add(predOps(ARMCC::AL));
+      RetMBB = MBB3;
     } else {
       // Generate a static random stride
       uint64_t Stride = (*RNG)();
@@ -228,7 +251,7 @@ ARMRandezvousShadowStack::createInitFunction(Module & M, GlobalVariable & SS) {
       }
     }
     // BX_RET
-    BuildMI(MBB, DebugLoc(), TII->get(ARM::tBX_RET))
+    BuildMI(RetMBB, DebugLoc(), TII->get(ARM::tBX_RET))
     .add(predOps(ARMCC::AL));
   }
 
