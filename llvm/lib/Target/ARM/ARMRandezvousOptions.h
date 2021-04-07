@@ -26,6 +26,7 @@ extern bool EnableRandezvousGDLR;
 extern bool EnableRandezvousGRBG;
 extern bool EnableRandezvousShadowStack;
 extern bool EnableRandezvousRAN;
+extern bool EnableRandezvousLGPromote;
 
 //===----------------------------------------------------------------------===//
 // Randezvous pass seeds

@@ -13,16 +13,11 @@
 #define DEBUG_TYPE "arm-randezvous-lgp"
 
 #include "ARMRandezvousLGPromote.h"
+#include "ARMRandezvousOptions.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/Analysis/CodeMetrics.h"
 
 using namespace llvm;
-
-static cl::opt<bool>
-EnableRandezvousLGPromote("arm-randezvous-lgp",
-                    cl::Hidden,
-                    cl::desc("Enable ARM Randezvous Local-to-Global Function Pointer Promotion"),
-                    cl::init(false));
 
 char ARMRandezvousLGPromote::ID = 0;
 

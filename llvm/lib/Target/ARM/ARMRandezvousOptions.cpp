@@ -74,6 +74,14 @@ RAN("arm-randezvous-ran",
     cl::location(EnableRandezvousRAN),
     cl::init(false));
 
+bool EnableRandezvousLGPromote;
+static cl::opt<bool, true>
+LGPromote("arm-randezvous-lgp",
+          cl::Hidden,
+          cl::desc("Enable ARM Randezvous Local-to-Global Promotion"),
+          cl::location(EnableRandezvousLGPromote),
+          cl::init(false));
+
 //===----------------------------------------------------------------------===//
 // Randezvous pass seeds
 //===----------------------------------------------------------------------===//
