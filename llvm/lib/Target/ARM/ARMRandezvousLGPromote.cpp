@@ -1,12 +1,12 @@
-//===- ARMRandezvousCLR.cpp - ARM Randezvous Code Layout Randomization ----===//
+//===- ARMRandezvousLGPromote.cpp - ARM Randezvous Local-to-Global Promotion==//
 //
 // This file was written by at the University of Rochester.
 // All Rights Reserved.
 //
 //===----------------------------------------------------------------------===//
 //
-// This file contains the implementation of a pass that randomizes the code
-// layout of ARM machine code.
+// This file contains the implementation of a pass that promotes certain local
+// variables that hold function pointers to global variables.
 //
 //===----------------------------------------------------------------------===//
 
@@ -14,8 +14,9 @@
 
 #include "ARMRandezvousLGPromote.h"
 #include "ARMRandezvousOptions.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/Analysis/CodeMetrics.h"
+#include "llvm/ADT/SCCIterator.h"
+#include "llvm/Analysis/CallGraph.h"
+#include "llvm/IR/Instructions.h"
 
 using namespace llvm;
 
@@ -26,42 +27,101 @@ ARMRandezvousLGPromote::ARMRandezvousLGPromote() : ModulePass(ID) {
 
 StringRef
 ARMRandezvousLGPromote::getPassName() const {
-  return "ARM Randezvous Local-to-Global Function Pointer Promotion Pass";
+  return "ARM Randezvous Local-to-Global Promotion Pass";
 }
 
-bool
-ARMRandezvousLGPromote::isFunctionPointerType(Type *type) {
-  if (PointerType *pt=dyn_cast<PointerType>(type)) {
-    if (PointerType *pt2=dyn_cast<PointerType>(pt->getElementType())) {
-      if (pt2->getElementType()->isFunctionTy()) {
-        errs() << "[LGP] FunctionType found " << *(pt2->getElementType()) << "\n";
+void
+ARMRandezvousLGPromote::getAnalysisUsage(AnalysisUsage & AU) const {
+  // We need this to access the call graph
+  AU.addRequired<CallGraphWrapperPass>();
+
+  AU.setPreservesCFG();
+  ModulePass::getAnalysisUsage(AU);
+}
+
+//
+// Function: containsFunctionPointerType()
+//
+// Description:
+//   This function examines a Type to see whether it can explicitly contain one
+//   or more function pointers.  Note that this function recurses on aggregate
+//   types.
+//
+// Input:
+//   Ty - A pointer to a Type to examine.
+//
+// Return value:
+//   true  - The Type can contain one or more function pointers.
+//   false - The Type does not contain a function pointer.
+//
+static bool
+containsFunctionPointerType(Type * Ty) {
+  // Pointer
+  if (PointerType * PtrTy = dyn_cast<PointerType>(Ty)) {
+    return PtrTy->getElementType()->isFunctionTy();
+  }
+
+  // Array
+  if (ArrayType * ArrayTy = dyn_cast<ArrayType>(Ty)) {
+    return containsFunctionPointerType(ArrayTy->getElementType());
+  }
+
+  // Struct
+  if (StructType * StructTy = dyn_cast<StructType>(Ty)) {
+    for (Type * ElementTy : StructTy->elements()) {
+      if (containsFunctionPointerType(ElementTy)) {
         return true;
-        //return isFunctionPointerType(pointerType->getElementType());
       }
     }
   }
 
-  return false;
-
-  // Check the type here
-  if (PointerType *pointerType=dyn_cast<PointerType>(type)) {
-    return isFunctionPointerType(pointerType->getElementType());
-  }
-  // Exit Condition
-  else if (type->isFunctionTy()) {
-    return  true;
-  }
+  // Other types do not contain function pointers
   return false;
 }
 
-Type * 
-ARMRandezvousLGPromote::getTypeForGlobal(Type *type) {
+//
+// Function: createNonZeroInitializerFor()
+//
+// Description:
+//   This function creates a non-zero Constant initializer for a give Type,
+//   which is supposed to contain one or more function pointers.  Note that
+//   this function recurses on aggregate types.
+//
+// Input:
+//   Ty - A pointer to a Type for which to create an initializer.
+//
+// Return value:
+//   A pointer to a created Constant.
+//
+static Constant *
+createNonZeroInitializerFor(Type * Ty) {
+  // Pointer: this is where we insert non-zero values
+  if (PointerType * PtrTy = dyn_cast<PointerType>(Ty)) {
+    return ConstantExpr::getIntToPtr(
+      ConstantInt::get(Type::getInt32Ty(Ty->getContext()), 1), Ty
+    );
+  }
 
-  if (PointerType *pt=dyn_cast<PointerType>(type))
-    return pt->getElementType();
+  // Array
+  if (ArrayType * ArrayTy = dyn_cast<ArrayType>(Ty)) {
+    std::vector<Constant *> InitArray;
+    for (uint64_t i = 0; i < ArrayTy->getNumElements(); ++i) {
+      InitArray.push_back(createNonZeroInitializerFor(ArrayTy->getElementType()));
+    }
+    return ConstantArray::get(ArrayTy, InitArray);
+  }
 
-  errs() << "[LGP] Shouldn't reach here\n";
-  return NULL;
+  // Struct
+  if (StructType * StructTy = dyn_cast<StructType>(Ty)) {
+    std::vector<Constant *> InitArray;
+    for (unsigned i = 0; i < StructTy->getNumElements(); ++i) {
+      InitArray.push_back(createNonZeroInitializerFor(StructTy->getElementType(i)));
+    }
+    return ConstantStruct::get(StructTy, InitArray);
+  }
+
+  // Zeroing out other types are fine
+  return Constant::getNullValue(Ty);
 }
 
 //
@@ -69,9 +129,9 @@ ARMRandezvousLGPromote::getTypeForGlobal(Type *type) {
 //
 // Description:
 //   This method is called when the PassManager wants this pass to transform
-//   the specified Module.  This method shuffles the order of functions within
-//   the module and/or the order of basic blocks within each function, and
-//   inserts trap instructions to fill the text section.
+//   the specified Module.  This method promotes all static local variables in
+//   a non-recursive function that contain one or more function pointers into
+//   global variables.
 //
 // Input:
 //   M - A reference to the Module to transform.
@@ -85,64 +145,55 @@ ARMRandezvousLGPromote::getTypeForGlobal(Type *type) {
 //
 bool
 ARMRandezvousLGPromote::runOnModule(Module & M) {
-  errs() << "[LGP] Running Randezvous Local-to-Global Function Pointer Pass\n";
   if (!EnableRandezvousLGPromote) {
-    errs() << "[LGP] Abort. Pass not enabled.\n";
     return false;
   }
 
-  // Identify recursive functions. Recursive function pointers will not be
-  // promoted to global variables since we only reserve a single location
-  // in the global region to store the function pointer, and at runtime, a
-  // recursive function pointers may need to dynamically point to distinct
-  // functions depending on the current frame.
-  std::set<const Function *> recursive_funs;
-  for (Function &F : M)
-    for (BasicBlock &BB: F)
-      for (Instruction &I : BB) 
-        if (const auto *Call = dyn_cast<CallBase>(&I)) {
-          if (const Function *F = Call->getCalledFunction()) {
-            // lParent function is the same as callee
-            if (F == BB.getParent())
-              recursive_funs.insert(F);
-            // TODO: Add case for non-obvious recursion, i.e. when the
-            // parent recursive function's frame is separated by another
-            // distinct function on the stack (e.g. Parent's parent is the
-            // same as callee).
-          }
-        }
-  
-  // Identify allocat instructions
-  for (Function &F : M) {
-    for (BasicBlock &BB : F) {
-      for (Instruction &I : BB) {
-        // Locate alloca instructions
-        if (AllocaInst *AI = dyn_cast<AllocaInst>(&I)) {
-          // Check if the alloca is allocating a function pointer
-          if (isFunctionPointerType(AI->getType())) {
-            // TODO: Add code to check for and skip recursive functions
-            // Promoting this function pointer alloca to a global
-            errs() << "[LGP] function pointer alloca: " << I << "\n";
-            // Get global parameters
-            //StringRef glob_name = ("LGP_" + F.getName() + "_" + AI->getName()).str();
-            StringRef glob_name = AI->getName();
-            // TODO replace with AI->getAllocatedType
-            Type* glob_type = getTypeForGlobal(AI->getType());
-            // Get reference to global object
-            Constant *new_global = M.getOrInsertGlobal(glob_name, glob_type);
-            // TODO change global variable fetcher to omit the name
-            if (GlobalVariable *gv=dyn_cast<GlobalVariable>(new_global)) {
-              gv->setLinkage(GlobalValue::PrivateLinkage);
-              gv->setInitializer(Constant::getNullValue(gv->getValueType()));
-            }
-            // Replace local uses of function pointer with global
-            AI->replaceAllUsesWith(new_global);
-          }
+  bool changed = false;
+
+  // Loop over SCCs instead of functions; this allows us to naturally skip
+  // recursive functions
+  CallGraph & CG = getAnalysis<CallGraphWrapperPass>().getCallGraph();
+  for (scc_iterator<CallGraph *> SCC = scc_begin(&CG); !SCC.isAtEnd(); ++SCC) {
+    // Skip recursive functions
+    if (SCC.hasCycle()) {
+      continue;
+    }
+
+    Function * F = SCC->front()->getFunction();
+    if (F == nullptr) {
+      continue;
+    }
+
+    // Identify alloca instructions in the function
+    std::vector<AllocaInst *> Allocas;
+    for (BasicBlock & BB : *F) {
+      for (Instruction & I : BB) {
+        if (AllocaInst * AI = dyn_cast<AllocaInst>(&I)) {
+          Allocas.push_back(AI);
         }
       }
     }
+
+    // Promote static allocas that contain function pointers to globals
+    for (AllocaInst * AI : Allocas) {
+      Type * AllocatedTy = AI->getAllocatedType();
+      if (AI->isStaticAlloca() && containsFunctionPointerType(AllocatedTy)) {
+        GlobalVariable * GV = new GlobalVariable(
+          M, AllocatedTy, false, GlobalVariable::InternalLinkage,
+          createNonZeroInitializerFor(AllocatedTy),
+          F->getName() + "." + AI->getName()
+        );
+        GV->setAlignment(AI->getAlign());
+
+        AI->replaceAllUsesWith(GV);
+        AI->eraseFromParent();
+        changed = true;
+      }
+    }
   }
-  return true;
+
+  return changed;
 }
 
 ModulePass *
