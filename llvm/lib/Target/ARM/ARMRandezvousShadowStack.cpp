@@ -794,6 +794,12 @@ ARMRandezvousShadowStack::runOnModule(Module & M) {
       // Limit the static stride to be within 8 bits, so that it can fit in
       // STR_POST and LDR_PRE as an immediate
       Stride &= 0xfful;
+      // Don't generate an empty stride; either the dynamic stride or the
+      // static stride needs to make sure of it, so just do it on the static to
+      // leave more room for the dynamic
+      if (Stride == 0u) {
+        Stride = 4u;
+      }
 
       for (auto & MIMO : Pushes) {
         changed |= pushToShadowStack(*MIMO.first, *MIMO.second, Stride);
