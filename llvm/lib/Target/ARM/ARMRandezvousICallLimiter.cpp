@@ -17,8 +17,6 @@
 #include "ARMRandezvousOptions.h"
 #include "ARMRegisterInfo.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
-#include "llvm/CodeGen/TargetRegisterInfo.h"
-#include "llvm/CodeGen/TargetSubtargetInfo.h"
 
 using namespace llvm;
 
