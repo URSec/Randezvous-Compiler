@@ -21,6 +21,18 @@ namespace llvm {
   // Static inline functions.
   //====================================================================
 
+  static inline size_t getBasicBlockCodeSize(const MachineBasicBlock & MBB) {
+    const MachineFunction & MF = *MBB.getParent();
+    const TargetInstrInfo * TII = MF.getSubtarget().getInstrInfo();
+
+    size_t CodeSize = 0ul;
+    for (const MachineInstr & MI : MBB) {
+      CodeSize += TII->getInstSizeInBytes(MI);
+    }
+
+    return CodeSize;
+  }
+
   //
   // Function: getFunctionCodeSize()
   //
@@ -33,14 +45,10 @@ namespace llvm {
   // Return value:
   //   The size (in bytes) of the machine function.
   //
-  static inline unsigned long getFunctionCodeSize(const MachineFunction & MF) {
-    const TargetInstrInfo * TII = MF.getSubtarget().getInstrInfo();
-
-    unsigned long CodeSize = 0ul;
+  static inline size_t getFunctionCodeSize(const MachineFunction & MF) {
+    size_t CodeSize = 0ul;
     for (const MachineBasicBlock & MBB : MF) {
-      for (const MachineInstr & MI : MBB) {
-        CodeSize += TII->getInstSizeInBytes(MI);
-      }
+      CodeSize += getBasicBlockCodeSize(MBB);
     }
 
     return CodeSize;
