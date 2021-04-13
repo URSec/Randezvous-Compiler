@@ -82,6 +82,14 @@ LGPromote("arm-randezvous-lgp",
           cl::location(EnableRandezvousLGPromote),
           cl::init(false));
 
+bool EnableRandezvousICallLimiter;
+static cl::opt<bool, true>
+ICallLimiter("arm-randezvous-icall-limiter",
+             cl::Hidden,
+             cl::desc("Enable ARM Randezvous Indirect Call Limiter"),
+             cl::location(EnableRandezvousICallLimiter),
+             cl::init(false));
+
 //===----------------------------------------------------------------------===//
 // Randezvous pass seeds
 //===----------------------------------------------------------------------===//
