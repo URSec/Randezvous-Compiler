@@ -14,6 +14,7 @@
 #include "ARMMacroFusion.h"
 #include "ARMRandezvousCLR.h"
 #include "ARMRandezvousGDLR.h"
+#include "ARMRandezvousICallLimiter.h"
 #include "ARMRandezvousLGPromote.h"
 #include "ARMRandezvousPicoXOM.h"
 #include "ARMRandezvousShadowStack.h"
@@ -511,6 +512,9 @@ void ARMPassConfig::addPreRegAlloc() {
     if (!DisableA15SDOptimization)
       addPass(createA15SDOptimizerPass());
   }
+
+  // Add Randezvous PreRegAlloc passes
+  addPass(createARMRandezvousICallLimiter());
 }
 
 void ARMPassConfig::addPreSched2() {
