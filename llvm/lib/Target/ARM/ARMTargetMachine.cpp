@@ -12,6 +12,7 @@
 #include "ARMTargetMachine.h"
 #include "ARM.h"
 #include "ARMMacroFusion.h"
+#include "ARMRandezvousCDLA.h"
 #include "ARMRandezvousCLR.h"
 #include "ARMRandezvousGDLR.h"
 #include "ARMRandezvousICallLimiter.h"
@@ -569,9 +570,11 @@ void ARMPassConfig::addPreEmitPass() {
 
 void ARMPassConfig::addPreEmitPass2() {
   // Add Randezvous CodeGen passes
+  addPass(createARMRandezvousCDLA(false));
   addPass(createARMRandezvousCLR());
   addPass(createARMRandezvousShadowStack());
   addPass(createARMRandezvousGDLR());
+  addPass(createARMRandezvousCDLA(true));
 
   addPass(createARMConstantIslandPass());
   addPass(createARMLowOverheadLoopsPass());

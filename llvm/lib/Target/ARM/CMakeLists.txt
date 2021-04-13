@@ -18,6 +18,7 @@ tablegen(LLVM ARMGenSystemRegister.inc -gen-searchable-tables)
 add_public_tablegen_target(ARMCommonTableGen)
 
 set(ARMRandezvous_SOURCES
+  ARMRandezvousCDLA.cpp
   ARMRandezvousCLR.cpp
   ARMRandezvousGDLR.cpp
   ARMRandezvousICallLimiter.cpp
