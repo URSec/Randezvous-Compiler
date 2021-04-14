@@ -15,10 +15,15 @@
 #include "ARMRandezvousLGPromote.h"
 #include "ARMRandezvousOptions.h"
 #include "llvm/ADT/SCCIterator.h"
+#include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/CallGraph.h"
 #include "llvm/IR/Instructions.h"
 
 using namespace llvm;
+
+STATISTIC(NumAllocasPromoted, "Number of allocas promoted to globals");
+STATISTIC(NumAllocasSCC, "Number of allocas not promoted due to SCC");
+STATISTIC(NumAllocasVarSize, "Number of allocas not promoted due to variable size");
 
 char ARMRandezvousLGPromote::ID = 0;
 
@@ -155,8 +160,21 @@ ARMRandezvousLGPromote::runOnModule(Module & M) {
   // recursive functions
   CallGraph & CG = getAnalysis<CallGraphWrapperPass>().getCallGraph();
   for (scc_iterator<CallGraph *> SCC = scc_begin(&CG); !SCC.isAtEnd(); ++SCC) {
-    // Skip recursive functions
+    // Skip recursive functions but collect statistics from them
     if (SCC.hasCycle()) {
+      for (CallGraphNode * Node : *SCC) {
+        if (Function * F = Node->getFunction()) {
+          for (BasicBlock & BB : *F) {
+            for (Instruction & I : BB) {
+              if (AllocaInst * AI = dyn_cast<AllocaInst>(&I)) {
+                if (containsFunctionPointerType(AI->getAllocatedType())) {
+                  ++NumAllocasSCC;
+                }
+              }
+            }
+          }
+        }
+      }
       continue;
     }
 
@@ -178,7 +196,12 @@ ARMRandezvousLGPromote::runOnModule(Module & M) {
     // Promote static allocas that contain function pointers to globals
     for (AllocaInst * AI : Allocas) {
       Type * AllocatedTy = AI->getAllocatedType();
-      if (AI->isStaticAlloca() && containsFunctionPointerType(AllocatedTy)) {
+      if (containsFunctionPointerType(AllocatedTy)) {
+        if (!AI->isStaticAlloca()) {
+          ++NumAllocasVarSize;
+          continue;
+        }
+
         GlobalVariable * GV = new GlobalVariable(
           M, AllocatedTy, false, GlobalVariable::InternalLinkage,
           createNonZeroInitializerFor(AllocatedTy),
@@ -188,6 +211,7 @@ ARMRandezvousLGPromote::runOnModule(Module & M) {
 
         AI->replaceAllUsesWith(GV);
         AI->eraseFromParent();
+        ++NumAllocasPromoted;
         changed = true;
       }
     }

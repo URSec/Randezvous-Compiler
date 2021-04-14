@@ -16,9 +16,12 @@
 #include "ARMRandezvousICallLimiter.h"
 #include "ARMRandezvousOptions.h"
 #include "ARMRegisterInfo.h"
+#include "llvm/ADT/Statistic.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
 
 using namespace llvm;
+
+STATISTIC(NumICallsLimited, "Number of indirect calls limited");
 
 char ARMRandezvousICallLimiter::ID = 0;
 
@@ -69,6 +72,7 @@ ARMRandezvousICallLimiter::runOnMachineFunction(MachineFunction & MF) {
         if (Reg.isVirtual()) {
           // Simply constrain the virtual register to be of tcGPR class
           MRI.constrainRegClass(Reg, &ARM::tcGPRRegClass);
+          ++NumICallsLimited;
           changed = true;
         } else if (Reg.isPhysical() && !ARM::tcGPRRegClass.contains(Reg)) {
           // Need to create a virtual register of tcGPR class
@@ -89,6 +93,7 @@ ARMRandezvousICallLimiter::runOnMachineFunction(MachineFunction & MF) {
             .addReg(Reg)
             .add(predOps(Pred, PredReg));
           }
+          ++NumICallsLimited;
           changed = true;
         }
       }

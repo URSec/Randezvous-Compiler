@@ -17,13 +17,18 @@
 #include "ARMRandezvousOptions.h"
 #include "ARMRandezvousShadowStack.h"
 #include "MCTargetDesc/ARMAddressingModes.h"
+#include "llvm/ADT/Statistic.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/IR/IRBuilder.h"
-#include "llvm/Transforms/Utils/ModuleUtils.h"
 #include "llvm/Support/RandomNumberGenerator.h"
+#include "llvm/Transforms/Utils/ModuleUtils.h"
 
 using namespace llvm;
+
+STATISTIC(NumPrologues, "Number of prologues transformed to use shadow stack");
+STATISTIC(NumEpilogues, "Number of epilogues transformed to use shadow stack");
+STATISTIC(NumNullified, "Number of return addresses nullified");
 
 char ARMRandezvousShadowStack::ID = 0;
 
@@ -346,6 +351,7 @@ ARMRandezvousShadowStack::pushToShadowStack(MachineInstr & MI,
     break;
   }
 
+  ++NumPrologues;
   return true;
 }
 
@@ -459,6 +465,7 @@ ARMRandezvousShadowStack::popFromShadowStack(MachineInstr & MI,
     nullifyReturnAddress(*NewInsts[1], NewInsts[1]->getOperand(0));
   }
 
+  ++NumEpilogues;
   return true;
 }
 
@@ -653,6 +660,7 @@ ARMRandezvousShadowStack::nullifyReturnAddress(MachineInstr & MI,
     break;
   }
 
+  ++NumNullified;
   return true;
 }
 

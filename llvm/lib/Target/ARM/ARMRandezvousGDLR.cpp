@@ -14,11 +14,15 @@
 
 #include "ARMRandezvousGDLR.h"
 #include "ARMRandezvousOptions.h"
-#include "llvm/IR/Module.h"
+#include "llvm/ADT/Statistic.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
+#include "llvm/IR/Module.h"
 #include "llvm/Transforms/Utils/ModuleUtils.h"
 
 using namespace llvm;
+
+STATISTIC(NumGarbageObjects, "Number of pointer-sized garbage objects inserted");
+STATISTIC(NumTrapsEtched, "Number of trap instructions etched");
 
 char ARMRandezvousGDLR::ID = 0;
 
@@ -56,13 +60,13 @@ ARMRandezvousGDLR::releaseMemory() {
 //   garbage objects before the GlobalVariable.
 //
 // Inputs:
-//   GV                - A reference to a GlobalVariable before which to insert
-//                       garbage objects.
-//   NumGarbageObjects - The number of pointer-sized garbage objects to insert.
+//   GV          - A reference to a GlobalVariable before which to insert
+//                 garbage objects.
+//   NumGarbages - The number of pointer-sized garbage objects to insert.
 //
 void
 ARMRandezvousGDLR::insertGarbageObjects(GlobalVariable & GV,
-                                        uint64_t NumGarbageObjects) {
+                                        uint64_t NumGarbages) {
   Module & M = *GV.getParent();
 
   //
@@ -74,7 +78,7 @@ ARMRandezvousGDLR::insertGarbageObjects(GlobalVariable & GV,
   uint64_t PtrSize = M.getDataLayout().getPointerSize();
   LLVMContext & Ctx = M.getContext();
   PointerType * BlockAddrTy = PointerType::getUnqual(Type::getInt8Ty(Ctx));
-  ArrayType * GarbageObjectTy = ArrayType::get(BlockAddrTy, NumGarbageObjects);
+  ArrayType * GarbageObjectTy = ArrayType::get(BlockAddrTy, NumGarbages);
 
   // Create an initializer for the garbage object
   Constant * Initializer = nullptr;
@@ -84,7 +88,7 @@ ARMRandezvousGDLR::insertGarbageObjects(GlobalVariable & GV,
   } else if (EnableRandezvousGRBG && !TrapBlocks.empty()) {
     // Initialize the garbage object with addresses of random trap blocks
     std::vector<Constant *> InitArray;
-    for (uint64_t i = 0; i < NumGarbageObjects; ++i) {
+    for (uint64_t i = 0; i < NumGarbages; ++i) {
       uint64_t Idx = (*RNG)() % TrapBlocks.size();
       const BasicBlock * BB = TrapBlocks[Idx]->getBasicBlock();
       InitArray.push_back(BlockAddress::get(const_cast<BasicBlock *>(BB)));
@@ -94,7 +98,7 @@ ARMRandezvousGDLR::insertGarbageObjects(GlobalVariable & GV,
     // Initialize the garbage object with random values that have the LSB
     // set; this serves as the Thumb bit
     std::vector<Constant *> InitArray;
-    for (uint64_t i = 0; i < NumGarbageObjects; ++i) {
+    for (uint64_t i = 0; i < NumGarbages; ++i) {
       InitArray.push_back(Constant::getIntegerValue(BlockAddrTy,
                                                     APInt(8 * PtrSize,
                                                           (*RNG)() | 0x1)));
@@ -108,6 +112,7 @@ ARMRandezvousGDLR::insertGarbageObjects(GlobalVariable & GV,
     Initializer, GarbageObjectNamePrefix, &GV
   );
   GarbageObject->setAlignment(MaybeAlign(PtrSize));
+  NumGarbageObjects += NumGarbages;
 
   // Keep track of the garbage object
   GarbageObjects.push_back(GarbageObject);
@@ -123,6 +128,7 @@ ARMRandezvousGDLR::insertGarbageObjects(GlobalVariable & GV,
     TrapBlocksUnetched.pop_back();
     TrapInst.getOperand(0).ChangeToGA(GarbageObject, 0, ARMII::MO_LO16);
     TrapBlocksEtched.push_back(TrapBlock);
+    ++NumTrapsEtched;
   } else if (!TrapBlocks.empty()) {
     errs() << "[GDLR] All trap blocks etched!\n";
   }

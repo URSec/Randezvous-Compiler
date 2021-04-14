@@ -14,12 +14,15 @@
 
 #include "ARMRandezvousCLR.h"
 #include "ARMRandezvousOptions.h"
+#include "llvm/ADT/Statistic.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/IR/IRBuilder.h"
 
 using namespace llvm;
 
 char ARMRandezvousCLR::ID = 0;
+
+STATISTIC(NumTraps, "Number of trap instructions inserted");
 
 ARMRandezvousCLR::ARMRandezvousCLR() : ModulePass(ID) {
 }
@@ -154,6 +157,8 @@ ARMRandezvousCLR::insertTrapBlocks(Function & F, MachineFunction & MF,
       MBB->moveAfter(InsertionPts[i]);
       MBB->setHasAddressTaken();
       MBB->setIsRandezvousTrapBlock();
+
+      ++NumTraps;
     }
   }
 }

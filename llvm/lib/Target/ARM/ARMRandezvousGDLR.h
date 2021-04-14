@@ -37,7 +37,7 @@ namespace llvm {
     std::vector<MachineBasicBlock *> TrapBlocksEtched;
     std::vector<GlobalValue *> GarbageObjects;
 
-    void insertGarbageObjects(GlobalVariable & GV, uint64_t NumGarbageObjects);
+    void insertGarbageObjects(GlobalVariable & GV, uint64_t NumGarbages);
   };
 
   ModulePass * createARMRandezvousGDLR(void);
