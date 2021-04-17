@@ -557,6 +557,17 @@ let isCall = 1,
     let Inst{2-0} = 0b000;
   }
 
+  // For Randezvous
+  def tBLXr_Randezvous : TI<(outs), (ins pred:$p, tcGPR:$func), IIC_Br,
+                            "blx${p}\t$func", []>,
+                         Requires<[IsThumb, HasV5T]>,
+                         T1Special<{1,1,1,?}>, Sched<[WriteBrL]> { // A6.2.3 & A8.6.24;
+    bits<4> func;
+    let Inst{6-3} = func;
+    let Inst{2-0} = 0b000;
+    let isCodeGenOnly = 1;
+  }
+
   // ARMv8-M Security Extensions
   def tBLXNSr : TI<(outs), (ins pred:$p, GPRnopc:$func), IIC_Br,
                    "blxns${p}\t$func", []>,

@@ -96,6 +96,7 @@ ARMRandezvousICallLimiter::runOnMachineFunction(MachineFunction & MF) {
           ++NumICallsLimited;
           changed = true;
         }
+        MI.setDesc(TII->get(ARM::tBLXr_Randezvous));
       }
     }
   }

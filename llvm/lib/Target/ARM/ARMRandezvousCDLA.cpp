@@ -318,6 +318,7 @@ ARMRandezvousCDLA::determineLeakability(const MachineBasicBlock & MBB) {
       }
 
       case ARM::tBLXr:
+      case ARM::tBLXr_Randezvous:
         // Don't know the callee, so return true conservatively
         return true;
 
@@ -360,6 +361,7 @@ ARMRandezvousCDLA::determineLeakability(const MachineBasicBlock & MBB) {
     }
 
     case ARM::tBLXr:
+    case ARM::tBLXr_Randezvous:
       if (MBB.getLastNonDebugInstr() != &MI) {
         // Don't know the callee, so return true conservatively
         return true;
