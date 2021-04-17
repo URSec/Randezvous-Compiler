@@ -69,11 +69,10 @@ ARMRandezvousICallLimiter::runOnMachineFunction(MachineFunction & MF) {
     for (MachineInstr & MI : MBB) {
       if (MI.getOpcode() == ARM::tBLXr) {
         Register Reg = MI.getOperand(2).getReg();
+        assert(!Register::isStackSlot(Reg) && "Unexpected register type!");
         if (Reg.isVirtual()) {
           // Simply constrain the virtual register to be of tcGPR class
           MRI.constrainRegClass(Reg, &ARM::tcGPRRegClass);
-          ++NumICallsLimited;
-          changed = true;
         } else if (Reg.isPhysical() && !ARM::tcGPRRegClass.contains(Reg)) {
           // Need to create a virtual register of tcGPR class
           Register NewReg = MRI.createVirtualRegister(&ARM::tcGPRRegClass);
@@ -93,10 +92,10 @@ ARMRandezvousICallLimiter::runOnMachineFunction(MachineFunction & MF) {
             .addReg(Reg)
             .add(predOps(Pred, PredReg));
           }
-          ++NumICallsLimited;
-          changed = true;
         }
         MI.setDesc(TII->get(ARM::tBLXr_Randezvous));
+        ++NumICallsLimited;
+        changed = true;
       }
     }
   }
