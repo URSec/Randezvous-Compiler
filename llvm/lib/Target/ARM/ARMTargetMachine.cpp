@@ -571,9 +571,10 @@ void ARMPassConfig::addPreEmitPass() {
 void ARMPassConfig::addPreEmitPass2() {
   // Add Randezvous CodeGen passes
   addPass(createARMRandezvousCDLA(false));
-  addPass(createARMRandezvousCLR());
+  addPass(createARMRandezvousCLR(false));
   addPass(createARMRandezvousShadowStack());
   addPass(createARMRandezvousGDLR());
+  addPass(createARMRandezvousCLR(true));
   addPass(createARMRandezvousCDLA(true));
 
   addPass(createARMConstantIslandPass());

@@ -22,12 +22,21 @@ namespace llvm {
     // Pass Identifier
     static char ID;
 
-    ARMRandezvousCLR();
+    ARMRandezvousCLR(bool LateStage);
     virtual StringRef getPassName() const override;
     void getAnalysisUsage(AnalysisUsage & AU) const override;
     virtual bool runOnModule(Module & M) override;
 
   private:
+    // Which stage we are at:
+    //
+    // * Early stage: insert most of trap instructions for trap block consumers
+    //                between early and late stages
+    //
+    // * Late stage: shuffle code layout and insert the rest of trap
+    //               instructions
+    bool LateStage = false;
+
     std::unique_ptr<RandomNumberGenerator> RNG;
 
     void shuffleMachineBasicBlocks(MachineFunction & MF);
@@ -35,7 +44,7 @@ namespace llvm {
                           uint64_t NumTrapInsts);
   };
 
-  ModulePass * createARMRandezvousCLR(void);
+  ModulePass * createARMRandezvousCLR(bool LateStage);
 }
 
 #endif

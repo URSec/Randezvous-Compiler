@@ -24,7 +24,8 @@ char ARMRandezvousCLR::ID = 0;
 
 STATISTIC(NumTraps, "Number of trap instructions inserted");
 
-ARMRandezvousCLR::ARMRandezvousCLR() : ModulePass(ID) {
+ARMRandezvousCLR::ARMRandezvousCLR(bool LateStage)
+    : ModulePass(ID), LateStage(LateStage) {
 }
 
 StringRef
@@ -126,7 +127,7 @@ ARMRandezvousCLR::insertTrapBlocks(Function & F, MachineFunction & MF,
   // Determine where to insert trap instructions
   std::vector<MachineBasicBlock *> InsertionPts;
   for (MachineBasicBlock & MBB : MF) {
-    if (!MBB.canFallThrough()) {
+    if (!MBB.canFallThrough() && !MBB.isRandezvousTrapBlock()) {
       InsertionPts.push_back(&MBB);
     }
   }
@@ -192,8 +193,9 @@ ARMRandezvousCLR::runOnModule(Module & M) {
   Twine RNGName = getPassName() + "-" + Twine(RandezvousCLRSeed);
   RNG = M.createRNG(RNGName.str());
 
-  // First, shuffle the order of basic blocks in each function (if requested)
-  // and calculate how much space existing functions have taken up
+  // First, shuffle the order of basic blocks in each function (if requested
+  // and at the late stage) and calculate how much space existing functions
+  // have taken up
   uint64_t TotalTextSize = 0;
   std::vector<std::pair<Function *, MachineFunction *> > Functions;
   for (Function & F : M) {
@@ -202,8 +204,10 @@ ARMRandezvousCLR::runOnModule(Module & M) {
       continue;
     }
 
-    if (EnableRandezvousBBLR) {
-      shuffleMachineBasicBlocks(*MF);
+    if (LateStage) {
+      if (EnableRandezvousBBLR) {
+        shuffleMachineBasicBlocks(*MF);
+      }
     }
 
     uint64_t TextSize = getFunctionCodeSize(*MF);
@@ -214,22 +218,31 @@ ARMRandezvousCLR::runOnModule(Module & M) {
   }
   assert(TotalTextSize <= RandezvousMaxTextSize && "Text size exceeds the limit");
 
-  // Second, shuffle the order of functions; SymbolTableList (iplist_impl) does
-  // not support iterator increment/decrement so we have to first do
-  // out-of-place shuffling and then do in-place removal and insertion
-  SymbolTableList<Function> & FunctionList = M.getFunctionList();
-  llvm::shuffle(Functions.begin(), Functions.end(), *RNG);
-  for (auto & FMF : Functions) {
-    FunctionList.remove(FMF.first);
-  }
-  for (auto & FMF : Functions) {
-    FunctionList.push_back(FMF.first);
+  if (LateStage) {
+    // Second, shuffle the order of functions; SymbolTableList (iplist_impl)
+    // does not support iterator increment/decrement so we have to first do
+    // out-of-place shuffling and then do in-place removal and insertion
+    SymbolTableList<Function> & FunctionList = M.getFunctionList();
+    llvm::shuffle(Functions.begin(), Functions.end(), *RNG);
+    for (auto & FMF : Functions) {
+      FunctionList.remove(FMF.first);
+    }
+    for (auto & FMF : Functions) {
+      FunctionList.push_back(FMF.first);
+    }
   }
 
   // Third, determine the numbers of trap instructions to insert
   uint64_t NumTrapInsts = (RandezvousMaxTextSize - TotalTextSize) / 4;
   uint64_t SumShares = 0;
   std::vector<uint64_t> Shares(Functions.size());
+  if (!LateStage) {
+    // Insert 80% of trap instructions during the early stage; this allows most
+    // of trap blocks to be consumed by later passes while still keeping a
+    // considerable code size budget for later passes and the late-stage CLR
+    // pass
+    NumTrapInsts = NumTrapInsts * 80 / 100;
+  }
   for (uint64_t i = 0; i < Functions.size(); ++i) {
     Shares[i] = (*RNG)() & 0xffffffff; // Prevent overflow
     SumShares += Shares[i];
@@ -247,6 +260,6 @@ ARMRandezvousCLR::runOnModule(Module & M) {
 }
 
 ModulePass *
-llvm::createARMRandezvousCLR(void) {
-  return new ARMRandezvousCLR();
+llvm::createARMRandezvousCLR(bool EarlyTrapInsertion) {
+  return new ARMRandezvousCLR(EarlyTrapInsertion);
 }
