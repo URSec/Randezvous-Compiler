@@ -71,7 +71,8 @@ ARMRandezvousInstrumentor::findIT(MachineInstr & MI, unsigned & distance) {
   MachineInstr * Prev = &MI;
   unsigned dist = 0;
   while (Prev != nullptr && dist < 5 && Prev->getOpcode() != ARM::t2IT) {
-    if (!Prev->isDebugInstr()) {
+    // Only count non-meta instructions
+    if (!Prev->isMetaInstruction()) {
       ++dist;
     }
     Prev = Prev->getPrevNode();
@@ -160,7 +161,7 @@ ARMRandezvousInstrumentor::insertInstAfter(MachineInstr & MI,
 void
 ARMRandezvousInstrumentor::insertInstsBefore(MachineInstr & MI,
                                              ArrayRef<MachineInstr *> Insts) {
-  assert(!MI.isDebugInstr() && "Cannot instrument debug instruction!");
+  assert(!MI.isMetaInstruction() && "Cannot instrument meta instruction!");
 
   MachineFunction & MF = *MI.getMF();
   MachineBasicBlock & MBB = *MI.getParent();
@@ -188,31 +189,31 @@ ARMRandezvousInstrumentor::insertInstsBefore(MachineInstr & MI,
     MachineBasicBlock::iterator lastMI(MI);                 // Non-inclusive
     for (unsigned i = distance; i <= ITBlockSize; ) {
       ++lastMI;
-      // Skip debug instructions if we have not reached the end
-      if (i == ITBlockSize || !lastMI->isDebugInstr()) {
+      // Skip meta instructions if we have not reached the end
+      if (i == ITBlockSize || !lastMI->isMetaInstruction()) {
         ++i;
       }
     }
 
-    // Track new non-debug instructions in DQMask
+    // Track new non-meta instructions in DQMask
     auto it = DQMask.begin();
     for (unsigned i = 0; i < distance - 1; ++i) {
       it++;
     }
-    size_t NumNonDebugInsts = Insts.size();
+    size_t NumRealInsts = Insts.size();
     for (MachineInstr * Inst : Insts) {
-      if (Inst->isDebugInstr()) {
-        --NumNonDebugInsts;
+      if (Inst->isMetaInstruction()) {
+        --NumRealInsts;
       }
     }
-    DQMask.insert(it, NumNonDebugInsts, sameAsFirstCond);
+    DQMask.insert(it, NumRealInsts, sameAsFirstCond);
 
     // Insert ITs to cover instructions in [firstMI, lastMI)
     for (MachineBasicBlock::iterator i(firstMI); i != lastMI; ) {
       std::deque<bool> NewDQMask;
       MachineBasicBlock::iterator j(i);
       for (unsigned k = 0; k < 4 && j != lastMI; ++j) {
-        if (j->isDebugInstr()) {
+        if (j->isMetaInstruction()) {
           continue;
         }
         NewDQMask.push_back(DQMask.front());
@@ -253,7 +254,7 @@ ARMRandezvousInstrumentor::insertInstsBefore(MachineInstr & MI,
 void
 ARMRandezvousInstrumentor::insertInstsAfter(MachineInstr & MI,
                                             ArrayRef<MachineInstr *> Insts) {
-  assert(!MI.isDebugInstr() && "Cannot instrument debug instruction!");
+  assert(!MI.isMetaInstruction() && "Cannot instrument meta instruction!");
 
   MachineFunction & MF = *MI.getMF();
   MachineBasicBlock & MBB = *MI.getParent();
@@ -282,31 +283,31 @@ ARMRandezvousInstrumentor::insertInstsAfter(MachineInstr & MI,
     MachineBasicBlock::iterator lastMI(Insts.back());       // Non-inclusive
     for (unsigned i = distance; i <= ITBlockSize; ) {
       ++lastMI;
-      // Skip debug instructions if we have not reached the end
-      if (i == ITBlockSize || !lastMI->isDebugInstr()) {
+      // Skip meta instructions if we have not reached the end
+      if (i == ITBlockSize || !lastMI->isMetaInstruction()) {
         ++i;
       }
     }
 
-    // Track new non-debug instructions in DQMask
+    // Track new non-meta instructions in DQMask
     auto it = DQMask.begin();
     for (unsigned i = 0; i <= distance - 1; ++i) {
       it++;
     }
-    size_t NumNonDebugInsts = Insts.size();
+    size_t NumRealInsts = Insts.size();
     for (MachineInstr * Inst : Insts) {
-      if (Inst->isDebugInstr()) {
-        --NumNonDebugInsts;
+      if (Inst->isMetaInstruction()) {
+        --NumRealInsts;
       }
     }
-    DQMask.insert(it, NumNonDebugInsts, sameAsFirstCond);
+    DQMask.insert(it, NumRealInsts, sameAsFirstCond);
 
     // Insert ITs to cover instructions in [firstMI, lastMI)
     for (MachineBasicBlock::iterator i(firstMI); i != lastMI; ) {
       std::deque<bool> NewDQMask;
       MachineBasicBlock::iterator j(i);
       for (unsigned k = 0; k < 4 && j != lastMI; ++j) {
-        if (j->isDebugInstr()) {
+        if (j->isMetaInstruction()) {
           continue;
         }
         NewDQMask.push_back(DQMask.front());
@@ -345,7 +346,7 @@ ARMRandezvousInstrumentor::insertInstsAfter(MachineInstr & MI,
 //
 void
 ARMRandezvousInstrumentor::removeInst(MachineInstr & MI) {
-  assert(!MI.isDebugInstr() && "Cannot instrument debug instruction!");
+  assert(!MI.isMetaInstruction() && "Cannot instrument meta instruction!");
 
   unsigned distance;
   MachineInstr * IT = findIT(MI, distance);
@@ -407,7 +408,7 @@ ARMRandezvousInstrumentor::removeInst(MachineInstr & MI) {
 //
 MachineBasicBlock *
 ARMRandezvousInstrumentor::splitBasicBlockBefore(MachineInstr & MI) {
-  assert(!MI.isDebugInstr() && "Cannot instrument debug instruction!");
+  assert(!MI.isMetaInstruction() && "Cannot instrument meta instruction!");
 
   unsigned distance;
   MachineInstr * IT = findIT(MI, distance);
@@ -489,7 +490,7 @@ ARMRandezvousInstrumentor::splitBasicBlockBefore(MachineInstr & MI) {
 //
 MachineBasicBlock *
 ARMRandezvousInstrumentor::splitBasicBlockAfter(MachineInstr & MI) {
-  assert(!MI.isDebugInstr() && "Cannot instrument debug instruction!");
+  assert(!MI.isMetaInstruction() && "Cannot instrument meta instruction!");
 
   unsigned distance;
   MachineInstr * IT = findIT(MI, distance);
@@ -643,7 +644,7 @@ ARMRandezvousInstrumentor::encodeITMask(std::deque<bool> DQMask) {
 std::vector<Register>
 ARMRandezvousInstrumentor::findFreeRegistersBefore(const MachineInstr & MI,
                                                    bool Thumb) {
-  assert(!MI.isDebugInstr() && "Cannot instrument debug instruction!");
+  assert(!MI.isMetaInstruction() && "Cannot instrument meta instruction!");
 
   unsigned distance;
   const MachineInstr * IT = findIT(MI, distance);
@@ -734,7 +735,7 @@ ARMRandezvousInstrumentor::findFreeRegistersBefore(const MachineInstr & MI,
 std::vector<Register>
 ARMRandezvousInstrumentor::findFreeRegistersAfter(const MachineInstr & MI,
                                                   bool Thumb) {
-  assert(!MI.isDebugInstr() && "Cannot instrument debug instruction!");
+  assert(!MI.isMetaInstruction() && "Cannot instrument meta instruction!");
 
   unsigned distance;
   const MachineInstr * IT = findIT(MI, distance);
