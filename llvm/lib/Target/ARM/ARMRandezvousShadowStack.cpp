@@ -250,7 +250,7 @@ ARMRandezvousShadowStack::createInitFunction(Module & M, GlobalVariable & SS) {
         .addImm(Stride & 0xffff)
         .add(predOps(ARMCC::AL));
         BuildMI(MBB, DebugLoc(), TII->get(ARM::t2MOVTi16), ShadowStackStrideReg)
-        .addReg(ARM::R0)
+        .addReg(ShadowStackStrideReg)
         .addImm((Stride >> 16) & 0xffff)
         .add(predOps(ARMCC::AL));
       }
