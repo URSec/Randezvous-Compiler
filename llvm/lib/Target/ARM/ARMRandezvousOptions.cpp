@@ -58,6 +58,14 @@ GRBG("arm-randezvous-grbg",
      cl::location(EnableRandezvousGRBG),
      cl::init(false));
 
+bool EnableRandezvousGlobalGuard;
+static cl::opt<bool, true>
+GlobalGuard("arm-randezvous-global-guard",
+            cl::Hidden,
+            cl::desc("Enable ARM Randezvou Global Guard"),
+            cl::location(EnableRandezvousGlobalGuard),
+            cl::init(false));
+
 bool EnableRandezvousShadowStack;
 static cl::opt<bool, true>
 ShadowStack("arm-randezvous-shadow-stack",
@@ -173,6 +181,14 @@ ShadowStackStrideLength("arm-randezvous-shadow-stack-stride-length",
                         cl::desc("Number of bits for ARM Randezvous Shadow Stack stride"),
                         cl::location(RandezvousShadowStackStrideLength),
                         cl::init(8));
+
+unsigned RandezvousNumGlobalGuardCandidates;
+static cl::opt<unsigned, true>
+NumGlobalGuardCandidates("arm-randezvous-num-global-guard-candidates",
+                         cl::Hidden,
+                         cl::desc("Number of global guard candidates to generate"),
+                         cl::location(RandezvousNumGlobalGuardCandidates),
+                         cl::init(64));
 
 uintptr_t RandezvousRNGAddress;
 static cl::opt<uintptr_t, true>

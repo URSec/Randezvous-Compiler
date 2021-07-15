@@ -24,6 +24,7 @@ extern bool EnableRandezvousBBLR;
 extern bool EnableRandezvousPicoXOM;
 extern bool EnableRandezvousGDLR;
 extern bool EnableRandezvousGRBG;
+extern bool EnableRandezvousGlobalGuard;
 extern bool EnableRandezvousShadowStack;
 extern bool EnableRandezvousRAN;
 extern bool EnableRandezvousLGPromote;
@@ -52,6 +53,7 @@ extern size_t RandezvousShadowStackSize;
 //===----------------------------------------------------------------------===//
 
 extern unsigned RandezvousShadowStackStrideLength;
+extern unsigned RandezvousNumGlobalGuardCandidates;
 extern uintptr_t RandezvousRNGAddress;
 
 #endif
