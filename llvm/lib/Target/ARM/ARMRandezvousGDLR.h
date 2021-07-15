@@ -23,6 +23,7 @@ namespace llvm {
     static char ID;
 
     static constexpr StringRef GarbageObjectNamePrefix = "__randezvous_garbage";
+    static constexpr StringRef GlobalGuardFuncName = "__randezvous_globalguard_getaddr";
 
     ARMRandezvousGDLR();
     virtual StringRef getPassName() const override;
@@ -36,7 +37,9 @@ namespace llvm {
     std::vector<MachineBasicBlock *> TrapBlocksUnetched;
     std::vector<MachineBasicBlock *> TrapBlocksEtched;
     std::vector<GlobalValue *> GarbageObjects;
+    std::vector<GlobalValue *> GarbageObjectsEligibleForGlobalGuard;
 
+    Function * createGlobalGuardFunction(Module & M);
     void insertGarbageObjects(GlobalVariable & GV, uint64_t NumGarbages);
   };
 
