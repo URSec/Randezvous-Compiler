@@ -70,67 +70,80 @@ ARMRandezvousGDLR::insertGarbageObjects(GlobalVariable & GV,
   Module & M = *GV.getParent();
 
   //
-  // Instead of creating N pointer-sized garbage objects, we create a single
-  // garbage array object of N pointer-sized elements
+  // Instead of creating N pointer-sized garbage objects, we create
+  // N / (32 / pointer size) garbage array objects of (32 / pointer size)
+  // elements (plus a remainder garbage array object if N % (32 / pointer size)
+  // is not zero)
   //
 
-  // Create types for the garbage object
+  // Create types for the garbage objects
   uint64_t PtrSize = M.getDataLayout().getPointerSize();
   LLVMContext & Ctx = M.getContext();
   PointerType * BlockAddrTy = PointerType::getUnqual(Type::getInt8Ty(Ctx));
-  ArrayType * GarbageObjectTy = ArrayType::get(BlockAddrTy, NumGarbages);
+  ArrayType * GarbageObjectTy = ArrayType::get(BlockAddrTy, 32 / PtrSize);
+  ArrayType * RemainderTy = ArrayType::get(BlockAddrTy,
+                                           NumGarbages % (32 / PtrSize));
 
-  // Create an initializer for the garbage object
-  Constant * Initializer = nullptr;
-  if (GV.hasInitializer() && GV.getInitializer()->isZeroValue()) {
-    // GV is in BSS, so initialize the garbage object with zeros
-    Initializer = Constant::getNullValue(GarbageObjectTy);
-  } else if (EnableRandezvousGRBG && !TrapBlocks.empty()) {
-    // Initialize the garbage object with addresses of random trap blocks
-    std::vector<Constant *> InitArray;
-    for (uint64_t i = 0; i < NumGarbages; ++i) {
-      uint64_t Idx = (*RNG)() % TrapBlocks.size();
-      const BasicBlock * BB = TrapBlocks[Idx]->getBasicBlock();
-      InitArray.push_back(BlockAddress::get(const_cast<BasicBlock *>(BB)));
+  uint64_t RemainingSize = NumGarbages * PtrSize;
+  while (RemainingSize > 0) {
+    uint64_t ObjectSize = RemainingSize < 32 ? RemainingSize : 32;
+    uint64_t ObjectAlign = RemainingSize < 32 ? PtrSize : 32;
+    ArrayType * ObjectTy = RemainingSize < 32 ? RemainderTy : GarbageObjectTy;
+
+    // Create an initializer for the garbage object
+    Constant * Initializer = nullptr;
+    if (GV.hasInitializer() && GV.getInitializer()->isZeroValue()) {
+      // GV is in BSS, so initialize the garbage object with zeros
+      Initializer = Constant::getNullValue(ObjectTy);
+    } else if (EnableRandezvousGRBG && !TrapBlocks.empty()) {
+      // Initialize the garbage object with addresses of random trap blocks
+      std::vector<Constant *> InitArray;
+      for (uint64_t i = 0; i < ObjectSize / PtrSize; ++i) {
+        uint64_t Idx = (*RNG)() % TrapBlocks.size();
+        const BasicBlock * BB = TrapBlocks[Idx]->getBasicBlock();
+        InitArray.push_back(BlockAddress::get(const_cast<BasicBlock *>(BB)));
+      }
+      Initializer = ConstantArray::get(ObjectTy, InitArray);
+    } else {
+      // Initialize the garbage object with random values that have the LSB
+      // set; this serves as the Thumb bit
+      std::vector<Constant *> InitArray;
+      for (uint64_t i = 0; i < ObjectSize / PtrSize; ++i) {
+        InitArray.push_back(Constant::getIntegerValue(BlockAddrTy,
+                                                      APInt(8 * PtrSize,
+                                                            (*RNG)() | 0x1)));
+      }
+      Initializer = ConstantArray::get(ObjectTy, InitArray);
     }
-    Initializer = ConstantArray::get(GarbageObjectTy, InitArray);
-  } else {
-    // Initialize the garbage object with random values that have the LSB
-    // set; this serves as the Thumb bit
-    std::vector<Constant *> InitArray;
-    for (uint64_t i = 0; i < NumGarbages; ++i) {
-      InitArray.push_back(Constant::getIntegerValue(BlockAddrTy,
-                                                    APInt(8 * PtrSize,
-                                                          (*RNG)() | 0x1)));
+
+    // Create the garbage object and insert it before GV
+    GlobalVariable * GarbageObject = new GlobalVariable(
+      M, ObjectTy, GV.isConstant(), GlobalVariable::InternalLinkage,
+      Initializer, GarbageObjectNamePrefix, &GV
+    );
+    GarbageObject->setAlignment(MaybeAlign(ObjectAlign));
+    NumGarbageObjects += ObjectSize / PtrSize;
+
+    // Keep track of the garbage object
+    GarbageObjects.push_back(GarbageObject);
+
+    // Etch (the lower 16 bits of) the garbage object's address onto a trap
+    // instruction so that it will not be GC'd away
+    if (!TrapBlocksUnetched.empty()) {
+      MachineBasicBlock * TrapBlock = TrapBlocksUnetched.back();
+      assert(!TrapBlock->empty() && "Invalid trap block!");
+      MachineInstr & TrapInst = TrapBlock->front();
+      assert(TrapInst.getOpcode() == ARM::t2UDF_ga && "Invalid trap block!");
+
+      TrapBlocksUnetched.pop_back();
+      TrapInst.getOperand(0).ChangeToGA(GarbageObject, 0, ARMII::MO_LO16);
+      TrapBlocksEtched.push_back(TrapBlock);
+      ++NumTrapsEtched;
+    } else if (!TrapBlocks.empty()) {
+      errs() << "[GDLR] All trap blocks etched!\n";
     }
-    Initializer = ConstantArray::get(GarbageObjectTy, InitArray);
-  }
 
-  // Create the garbage object and insert it before GV
-  GlobalVariable * GarbageObject = new GlobalVariable(
-    M, GarbageObjectTy, GV.isConstant(), GlobalVariable::InternalLinkage,
-    Initializer, GarbageObjectNamePrefix, &GV
-  );
-  GarbageObject->setAlignment(MaybeAlign(PtrSize));
-  NumGarbageObjects += NumGarbages;
-
-  // Keep track of the garbage object
-  GarbageObjects.push_back(GarbageObject);
-
-  // Etch (the lower 16 bits of) the garbage object's address onto a trap
-  // instruction so that it will not be GC'd away
-  if (!TrapBlocksUnetched.empty()) {
-    MachineBasicBlock * TrapBlock = TrapBlocksUnetched.back();
-    assert(!TrapBlock->empty() && "Invalid trap block!");
-    MachineInstr & TrapInst = TrapBlock->front();
-    assert(TrapInst.getOpcode() == ARM::t2UDF_ga && "Invalid trap block!");
-
-    TrapBlocksUnetched.pop_back();
-    TrapInst.getOperand(0).ChangeToGA(GarbageObject, 0, ARMII::MO_LO16);
-    TrapBlocksEtched.push_back(TrapBlock);
-    ++NumTrapsEtched;
-  } else if (!TrapBlocks.empty()) {
-    errs() << "[GDLR] All trap blocks etched!\n";
+    RemainingSize -= ObjectSize;
   }
 }
 
