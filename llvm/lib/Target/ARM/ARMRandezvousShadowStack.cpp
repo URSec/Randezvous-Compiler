@@ -86,14 +86,20 @@ ARMRandezvousShadowStack::createShadowStack(Module & M) {
   // Initialize the shadow stack if not initialized
   if (!SS->hasInitializer()) {
     Constant * SSInit = nullptr;
-    if (EnableRandezvousGRBG && !TrapBlocks.empty()) {
-      // Initialize the shadow stack with a random array of trap block
-      // addresses
+    if (EnableRandezvousGRBG) {
+      // Initialize the shadow stack with an array of random values; they are
+      // either random trap block addresses or purely random values with the
+      // LSB set
       std::vector<Constant *> SSInitArray;
       for (unsigned i = 0; i < SSTy->getNumElements(); ++i) {
-        uint64_t Idx = (*RNG)() % TrapBlocks.size();
-        const BasicBlock * BB = TrapBlocks[Idx]->getBasicBlock();
-        SSInitArray.push_back(BlockAddress::get(const_cast<BasicBlock *>(BB)));
+        if (!TrapBlocks.empty()) {
+          uint64_t Idx = (*RNG)() % TrapBlocks.size();
+          const BasicBlock * BB = TrapBlocks[Idx]->getBasicBlock();
+          SSInitArray.push_back(BlockAddress::get(const_cast<BasicBlock *>(BB)));
+        } else {
+          APInt A(8 * PtrSize, (*RNG)() | 0x1);
+          SSInitArray.push_back(Constant::getIntegerValue(RetAddrTy, A));
+        }
       }
       SSInit = ConstantArray::get(SSTy, SSInitArray);
     } else {
@@ -474,7 +480,8 @@ ARMRandezvousShadowStack::popFromShadowStack(MachineInstr & MI,
 //
 // Description:
 //   This method nullifies an in-memory return address by either zeroing it out
-//   or filling it with the address of a randomly picked trap block.
+//   or filling it with a null value (either the address of a randomly picked
+//   trap block or a purely random value).
 //
 // Inputs:
 //   MI   - A reference to a POP or LDR instruction that writes to LR or PC.
@@ -630,17 +637,37 @@ ARMRandezvousShadowStack::nullifyReturnAddress(MachineInstr & MI,
                          .add(predOps(Pred, PredReg))
                          .addReg(FreeReg));
     }
-    if (EnableRandezvousGRBG && !TrapBlocks.empty()) {
-      uint64_t Idx = (*RNG)() % TrapBlocks.size();
-      const BasicBlock * BB = TrapBlocks[Idx]->getBasicBlock();
-      BlockAddress * BA = BlockAddress::get(const_cast<BasicBlock *>(BB));
-      NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::t2MOVi16), FreeReg)
-                         .addBlockAddress(BA, 0, ARMII::MO_LO16)
-                         .add(predOps(Pred, PredReg)));
-      NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::t2MOVTi16), FreeReg)
-                         .addReg(FreeReg)
-                         .addBlockAddress(BA, 0, ARMII::MO_HI16)
-                         .add(predOps(Pred, PredReg)));
+    if (EnableRandezvousGRBG) {
+      if (!TrapBlocks.empty()) {
+        // Use the address of a trap block as the null value
+        uint64_t Idx = (*RNG)() % TrapBlocks.size();
+        const BasicBlock * BB = TrapBlocks[Idx]->getBasicBlock();
+        BlockAddress * BA = BlockAddress::get(const_cast<BasicBlock *>(BB));
+        NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::t2MOVi16), FreeReg)
+                           .addBlockAddress(BA, 0, ARMII::MO_LO16)
+                           .add(predOps(Pred, PredReg)));
+        NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::t2MOVTi16), FreeReg)
+                           .addReg(FreeReg)
+                           .addBlockAddress(BA, 0, ARMII::MO_HI16)
+                           .add(predOps(Pred, PredReg)));
+      } else {
+        // Use a random value with the LSB set as the null value
+        uint32_t NullValue = (*RNG)() | 0x1;
+        if (ARM_AM::getT2SOImmVal(NullValue) != -1) {
+          NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::t2MOVi), FreeReg)
+                             .addImm(NullValue)
+                             .add(predOps(Pred, PredReg))
+                             .add(condCodeOp())); // No 'S' bit
+        } else {
+          NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::t2MOVi16), FreeReg)
+                             .addImm(NullValue & 0xffff)
+                             .add(predOps(Pred, PredReg)));
+          NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::t2MOVTi16), FreeReg)
+                             .addReg(FreeReg)
+                             .addImm((NullValue >> 16) & 0xffff)
+                             .add(predOps(Pred, PredReg)));
+        }
+      }
     } else {
       NewInsts.push_back(BuildMI(MF, DL, TII->get(ARM::t2MOVi16), FreeReg)
                          .addImm(0)
