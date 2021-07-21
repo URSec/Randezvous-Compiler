@@ -76,16 +76,14 @@ ARMRandezvousCLR::shuffleMachineBasicBlocks(MachineFunction & MF) {
       .addMBB(FallThruMBB)
       .add(predOps(ARMCC::AL));
     }
-    if (MBB.getIterator() != MF.begin()) {
-      MBBs.push_back(&MBB);
-    }
+    MBBs.push_back(&MBB);
   }
 
   // Now do shuffling; ilist (iplist_impl) does not support iterator
   // increment/decrement so we have to first do out-of-place shuffling and then
   // do in-place removal and insertion
   auto & MBBList = (&MF)->*(MachineFunction::getSublistAccess)(nullptr);
-  llvm::shuffle(MBBs.begin(), MBBs.end(), *RNG);
+  llvm::shuffle(MBBs.begin() + 1, MBBs.end(), *RNG);
   for (MachineBasicBlock * MBB : MBBs) {
     MBBList.remove(MBB);
   }
