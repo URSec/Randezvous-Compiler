@@ -34,6 +34,14 @@ BBLR("arm-randezvous-bblr",
      cl::location(EnableRandezvousBBLR),
      cl::init(false));
 
+bool EnableRandezvousBBCLR;
+static cl::opt<bool, true>
+BBCLR("arm-randezvous-bbclr",
+      cl::Hidden,
+      cl::desc("Enable Basic Block Cluster Layout Randomization for ARM Randezvous CLR"),
+      cl::location(EnableRandezvousBBCLR),
+      cl::init(false));
+
 bool EnableRandezvousPicoXOM;
 static cl::opt<bool, true>
 PicoXOM("arm-randezvous-picoxom",
