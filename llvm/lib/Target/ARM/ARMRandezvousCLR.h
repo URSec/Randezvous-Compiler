@@ -40,6 +40,7 @@ namespace llvm {
     std::unique_ptr<RandomNumberGenerator> RNG;
 
     void shuffleMachineBasicBlocks(MachineFunction & MF);
+    void shuffleMachineBasicBlockClusters(MachineFunction & MF);
     void insertTrapBlocks(Function & F, MachineFunction & MF,
                           uint64_t NumTrapInsts);
   };

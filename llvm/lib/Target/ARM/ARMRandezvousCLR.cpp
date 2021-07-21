@@ -93,6 +93,67 @@ ARMRandezvousCLR::shuffleMachineBasicBlocks(MachineFunction & MF) {
 }
 
 //
+// Method: shuffleMachineBasicBlockClusters()
+//
+// Description:
+//   This method shuffles the order of clusters of MachineBasicBlocks that fall
+//   through in the order as they appear.  It shuffles all the basic block
+//   clusters except the entry cluster.
+//
+// Input:
+//   MF - A reference to the MachineFunction.
+//
+// Output:
+//   MF - The transformed MachineFunction.
+//
+void
+ARMRandezvousCLR::shuffleMachineBasicBlockClusters(MachineFunction & MF) {
+  auto & MBBList = (&MF)->*(MachineFunction::getSublistAccess)(nullptr);
+
+  // Construct a list of clusters
+  std::vector<std::vector<MachineBasicBlock *> *> Clusters;
+  std::vector<MachineBasicBlock *> * CurrentCluster = nullptr;
+  for (MachineBasicBlock & MBB : MF) {
+    if (CurrentCluster == nullptr) {
+      CurrentCluster = new std::vector<MachineBasicBlock *>();
+    }
+    CurrentCluster->push_back(&MBB);
+    if (!MBB.canFallThrough()) {
+      Clusters.push_back(CurrentCluster);
+      CurrentCluster = nullptr;
+    }
+  }
+
+  do {
+    // Shuffling has no effect on functions with fewer than 3 clusters (because
+    // we are not reordering the entry cluster)
+    if (Clusters.size() < 3) {
+      break;
+    }
+
+    // Now do shuffling; ilist (iplist_impl) does not support iterator
+    // increment/decrement so we have to first do out-of-place shuffling and
+    // then do in-place removal and insertion
+    llvm::shuffle(Clusters.begin() + 1, Clusters.end(), *RNG);
+    for (auto * Cluster : Clusters) {
+      for (MachineBasicBlock * MBB : *Cluster) {
+        MBBList.remove(MBB);
+      }
+    }
+    for (auto * Cluster : Clusters) {
+      for (MachineBasicBlock * MBB : *Cluster) {
+        MBBList.push_back(MBB);
+      }
+    }
+  } while (false);
+
+  // Garbage collection
+  for (auto * Cluster : Clusters) {
+    delete Cluster;
+  }
+}
+
+//
 // Method: insertTrapBlocks()
 //
 // Description:
@@ -205,6 +266,8 @@ ARMRandezvousCLR::runOnModule(Module & M) {
     if (LateStage) {
       if (EnableRandezvousBBLR) {
         shuffleMachineBasicBlocks(*MF);
+      } else if (EnableRandezvousBBCLR) {
+        shuffleMachineBasicBlockClusters(*MF);
       }
     }
 
