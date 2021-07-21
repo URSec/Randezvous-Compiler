@@ -23,6 +23,9 @@ using namespace llvm;
 char ARMRandezvousCLR::ID = 0;
 
 STATISTIC(NumTraps, "Number of trap instructions inserted");
+STATISTIC(NumFuncsBBLR, "Number of functions with basic blocks reordered");
+STATISTIC(NumJumps4BBLR, "Number of jump instructions inserted due to BBLR");
+STATISTIC(NumFuncsBBCLR, "Number of functions with basic block clusters reordered");
 
 ARMRandezvousCLR::ARMRandezvousCLR(bool LateStage)
     : ModulePass(ID), LateStage(LateStage) {
@@ -75,6 +78,7 @@ ARMRandezvousCLR::shuffleMachineBasicBlocks(MachineFunction & MF) {
       BuildMI(MBB, MBB.end(), DebugLoc(), TII->get(ARM::t2B))
       .addMBB(FallThruMBB)
       .add(predOps(ARMCC::AL));
+      ++NumJumps4BBLR;
     }
     MBBs.push_back(&MBB);
   }
@@ -90,6 +94,7 @@ ARMRandezvousCLR::shuffleMachineBasicBlocks(MachineFunction & MF) {
   for (MachineBasicBlock * MBB : MBBs) {
     MBBList.push_back(MBB);
   }
+  ++NumFuncsBBLR;
 }
 
 //
@@ -145,6 +150,7 @@ ARMRandezvousCLR::shuffleMachineBasicBlockClusters(MachineFunction & MF) {
         MBBList.push_back(MBB);
       }
     }
+    ++NumFuncsBBCLR;
   } while (false);
 
   // Garbage collection
