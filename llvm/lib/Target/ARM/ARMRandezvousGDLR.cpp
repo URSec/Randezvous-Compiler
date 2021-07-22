@@ -24,6 +24,9 @@
 using namespace llvm;
 
 STATISTIC(NumGarbageObjects, "Number of pointer-sized garbage objects inserted");
+STATISTIC(NumGarbageObjectsInRodata, "Number of pointer-sized garbage objects inserted in Rodata");
+STATISTIC(NumGarbageObjectsInData, "Number of pointer-sized garbage objects inserted in Data");
+STATISTIC(NumGarbageObjectsInBss, "Number of pointer-sized garbage objects inserted in Bss");
 STATISTIC(NumTrapsEtched, "Number of trap instructions etched");
 
 char ARMRandezvousGDLR::ID = 0;
@@ -373,6 +376,13 @@ ARMRandezvousGDLR::insertGarbageObjects(GlobalVariable & GV,
     );
     GarbageObject->setAlignment(MaybeAlign(ObjectAlign));
     NumGarbageObjects += ObjectSize / PtrSize;
+    if (GarbageObject->isConstant()) {
+      NumGarbageObjectsInRodata += ObjectSize / PtrSize;
+    } else if (Initializer->isZeroValue()) {
+      NumGarbageObjectsInBss += ObjectSize / PtrSize;
+    } else {
+      NumGarbageObjectsInData += ObjectSize / PtrSize;
+    }
 
     // Keep track of the garbage object
     GarbageObjects.push_back(GarbageObject);
