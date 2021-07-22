@@ -376,7 +376,8 @@ ARMRandezvousGDLR::insertGarbageObjects(GlobalVariable & GV,
 
     // Keep track of the garbage object
     GarbageObjects.push_back(GarbageObject);
-    if (EnableRandezvousGlobalGuard && !GV.isConstant() && ObjectSize == 32) {
+    if (EnableRandezvousGlobalGuard && !GarbageObject->isConstant() &&
+        ObjectSize == 32) {
       GarbageObjectsEligibleForGlobalGuard.push_back(GarbageObject);
     }
 
