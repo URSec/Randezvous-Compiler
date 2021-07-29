@@ -23,6 +23,9 @@
 
 using namespace llvm;
 
+STATISTIC(NumBytesInRodata, "Original Rodata size");
+STATISTIC(NumBytesInData, "Original Data size");
+STATISTIC(NumBytesInBss, "Original Bss size");
 STATISTIC(NumGarbageObjects, "Number of pointer-sized garbage objects inserted");
 STATISTIC(NumGarbageObjectsInRodata, "Number of pointer-sized garbage objects inserted in Rodata");
 STATISTIC(NumGarbageObjectsInData, "Number of pointer-sized garbage objects inserted in Data");
@@ -432,10 +435,6 @@ ARMRandezvousGDLR::insertGarbageObjects(GlobalVariable & GV,
 //
 bool
 ARMRandezvousGDLR::runOnModule(Module & M) {
-  if (!EnableRandezvousGDLR) {
-    return false;
-  }
-
   MachineModuleInfo & MMI = getAnalysis<MachineModuleInfoWrapperPass>().getMMI();
   Twine RNGName = getPassName() + "-" + Twine(RandezvousGDLRSeed);
   RNG = M.createRNG(RNGName.str());
@@ -495,6 +494,14 @@ ARMRandezvousGDLR::runOnModule(Module & M) {
   for (GlobalVariable * GV : BssGVs) {
     TotalBssSize += DL.getTypeAllocSize(GV->getType()->getElementType());
   }
+  NumBytesInRodata = TotalRodataSize;
+  NumBytesInData = TotalDataSize;
+  NumBytesInBss = TotalBssSize;
+
+  if (!EnableRandezvousGDLR) {
+    return false;
+  }
+
   assert(TotalRodataSize <= RandezvousMaxRodataSize && "Rodata size exceeds the limit!");
   assert(TotalDataSize <= RandezvousMaxDataSize && "Data size exceeds the limit!");
   assert(TotalBssSize <= RandezvousMaxBssSize && "Bss size exceeds the limit!");
