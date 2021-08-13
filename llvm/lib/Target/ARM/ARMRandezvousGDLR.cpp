@@ -456,6 +456,7 @@ ARMRandezvousGDLR::runOnModule(Module & M) {
   std::vector<GlobalVariable *> RodataGVs;
   std::vector<GlobalVariable *> DataGVs;
   std::vector<GlobalVariable *> BssGVs;
+  std::vector<GlobalVariable *> Bss2DataGVs;
   for (GlobalVariable & GV : M.globals()) {
     if (GV.isConstant()) {
       if (!GV.hasSection() || GV.getSection().startswith(".rodata")) {
@@ -466,7 +467,12 @@ ARMRandezvousGDLR::runOnModule(Module & M) {
     } else if (GV.hasInitializer()) {
       if (GV.getInitializer()->isZeroValue()) {
         if (!GV.hasSection() || GV.getSection().startswith(".bss")) {
-          BssGVs.push_back(&GV);
+          Type * Ty = GV.getType()->getElementType();
+          if (containsFunctionPointerType(Ty)) {
+            Bss2DataGVs.push_back(&GV);
+          } else {
+            BssGVs.push_back(&GV);
+          }
         } else {
           errs() << "[GDLR] Ignore bss GV: " << GV << "\n";
         }
@@ -485,6 +491,7 @@ ARMRandezvousGDLR::runOnModule(Module & M) {
   // Second, calculate how much space each category of globals has taken up
   const DataLayout & DL = M.getDataLayout();
   uint64_t TotalRodataSize = 0, TotalDataSize = 0, TotalBssSize = 0;
+  uint64_t TotalBss2DataSize = 0;
   for (GlobalVariable * GV : RodataGVs) {
     TotalRodataSize += DL.getTypeAllocSize(GV->getType()->getElementType());
   }
@@ -494,17 +501,32 @@ ARMRandezvousGDLR::runOnModule(Module & M) {
   for (GlobalVariable * GV : BssGVs) {
     TotalBssSize += DL.getTypeAllocSize(GV->getType()->getElementType());
   }
+  for (GlobalVariable * GV : Bss2DataGVs) {
+    TotalBss2DataSize += DL.getTypeAllocSize(GV->getType()->getElementType());
+  }
   NumBytesInRodata = TotalRodataSize;
   NumBytesInData = TotalDataSize;
-  NumBytesInBss = TotalBssSize;
+  NumBytesInBss = TotalBssSize + TotalBss2DataSize;
 
   if (!EnableRandezvousGDLR) {
     return false;
   }
 
+  TotalDataSize += TotalBss2DataSize;
+
   assert(TotalRodataSize <= RandezvousMaxRodataSize && "Rodata size exceeds the limit!");
   assert(TotalDataSize <= RandezvousMaxDataSize && "Data size exceeds the limit!");
   assert(TotalBssSize <= RandezvousMaxBssSize && "Bss size exceeds the limit!");
+
+  /* Move globals that should migrate from Bss to Data */
+  for (GlobalVariable * GV : Bss2DataGVs) {
+    Type * Ty = GV->getType()->getElementType();
+    GV->setInitializer(createNonZeroInitializerFor(Ty));
+    if (GV->hasSection() && GV->getSection().startswith(".bss")) {
+      GV->setSection(".data");
+    }
+    DataGVs.push_back(GV);
+  }
 
   // Third, shuffle the order of globals
   SymbolTableList<GlobalVariable> & GlobalList = M.getGlobalList();

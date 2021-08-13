@@ -12,6 +12,7 @@
 
 #define DEBUG_TYPE "arm-randezvous-lgp"
 
+#include "ARMRandezvousInstrumentor.h"
 #include "ARMRandezvousLGPromote.h"
 #include "ARMRandezvousOptions.h"
 #include "llvm/ADT/SCCIterator.h"
@@ -42,91 +43,6 @@ ARMRandezvousLGPromote::getAnalysisUsage(AnalysisUsage & AU) const {
 
   AU.setPreservesCFG();
   ModulePass::getAnalysisUsage(AU);
-}
-
-//
-// Function: containsFunctionPointerType()
-//
-// Description:
-//   This function examines a Type to see whether it can explicitly contain one
-//   or more function pointers.  Note that this function recurses on aggregate
-//   types.
-//
-// Input:
-//   Ty - A pointer to a Type to examine.
-//
-// Return value:
-//   true  - The Type can contain one or more function pointers.
-//   false - The Type does not contain a function pointer.
-//
-static bool
-containsFunctionPointerType(Type * Ty) {
-  // Pointer
-  if (PointerType * PtrTy = dyn_cast<PointerType>(Ty)) {
-    return PtrTy->getElementType()->isFunctionTy();
-  }
-
-  // Array
-  if (ArrayType * ArrayTy = dyn_cast<ArrayType>(Ty)) {
-    return containsFunctionPointerType(ArrayTy->getElementType());
-  }
-
-  // Struct
-  if (StructType * StructTy = dyn_cast<StructType>(Ty)) {
-    for (Type * ElementTy : StructTy->elements()) {
-      if (containsFunctionPointerType(ElementTy)) {
-        return true;
-      }
-    }
-  }
-
-  // Other types do not contain function pointers
-  return false;
-}
-
-//
-// Function: createNonZeroInitializerFor()
-//
-// Description:
-//   This function creates a non-zero Constant initializer for a give Type,
-//   which is supposed to contain one or more function pointers.  Note that
-//   this function recurses on aggregate types.
-//
-// Input:
-//   Ty - A pointer to a Type for which to create an initializer.
-//
-// Return value:
-//   A pointer to a created Constant.
-//
-static Constant *
-createNonZeroInitializerFor(Type * Ty) {
-  // Pointer: this is where we insert non-zero values
-  if (PointerType * PtrTy = dyn_cast<PointerType>(Ty)) {
-    return ConstantExpr::getIntToPtr(
-      ConstantInt::get(Type::getInt32Ty(Ty->getContext()), 1), Ty
-    );
-  }
-
-  // Array
-  if (ArrayType * ArrayTy = dyn_cast<ArrayType>(Ty)) {
-    std::vector<Constant *> InitArray;
-    for (uint64_t i = 0; i < ArrayTy->getNumElements(); ++i) {
-      InitArray.push_back(createNonZeroInitializerFor(ArrayTy->getElementType()));
-    }
-    return ConstantArray::get(ArrayTy, InitArray);
-  }
-
-  // Struct
-  if (StructType * StructTy = dyn_cast<StructType>(Ty)) {
-    std::vector<Constant *> InitArray;
-    for (unsigned i = 0; i < StructTy->getNumElements(); ++i) {
-      InitArray.push_back(createNonZeroInitializerFor(StructTy->getElementType(i)));
-    }
-    return ConstantStruct::get(StructTy, InitArray);
-  }
-
-  // Zeroing out other types are fine
-  return Constant::getNullValue(Ty);
 }
 
 //
