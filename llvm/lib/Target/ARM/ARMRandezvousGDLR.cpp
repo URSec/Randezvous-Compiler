@@ -23,6 +23,9 @@
 
 using namespace llvm;
 
+STATISTIC(NumGVsInRodata, "Number of global variables in original Rodata");
+STATISTIC(NumGVsInData, "Number of global variables in original Data");
+STATISTIC(NumGVsInBss, "Number of global variables in original Bss");
 STATISTIC(NumGVsBss2Data, "Number of global variables moved from Bss to Data");
 STATISTIC(NumBytesInRodata, "Original Rodata size");
 STATISTIC(NumBytesInData, "Original Data size");
@@ -505,6 +508,9 @@ ARMRandezvousGDLR::runOnModule(Module & M) {
   for (GlobalVariable * GV : Bss2DataGVs) {
     TotalBss2DataSize += DL.getTypeAllocSize(GV->getType()->getElementType());
   }
+  NumGVsInRodata = RodataGVs.size();
+  NumGVsInData = DataGVs.size();
+  NumGVsInBss = BssGVs.size() + Bss2DataGVs.size();
   NumBytesInRodata = TotalRodataSize;
   NumBytesInData = TotalDataSize;
   NumBytesInBss = TotalBssSize + TotalBss2DataSize;
