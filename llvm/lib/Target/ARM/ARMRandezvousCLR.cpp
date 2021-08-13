@@ -54,8 +54,8 @@ ARMRandezvousCLR::getAnalysisUsage(AnalysisUsage & AU) const {
 //   blocks will be taken apart and branch instructions will be inserted
 //   appropriately to preserve the CFG.
 //
-// Inputs:
-//   MF  - A reference to the MachineFunction.
+// Input:
+//   MF - A reference to the MachineFunction.
 //
 // Output:
 //   MF - The transformed MachineFunction.
