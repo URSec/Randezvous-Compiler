@@ -23,6 +23,7 @@
 
 using namespace llvm;
 
+STATISTIC(NumGVsBss2Data, "Number of global variables moved from Bss to Data");
 STATISTIC(NumBytesInRodata, "Original Rodata size");
 STATISTIC(NumBytesInData, "Original Data size");
 STATISTIC(NumBytesInBss, "Original Bss size");
@@ -527,6 +528,7 @@ ARMRandezvousGDLR::runOnModule(Module & M) {
     }
     DataGVs.push_back(GV);
   }
+  NumGVsBss2Data = Bss2DataGVs.size();
 
   // Third, shuffle the order of globals
   SymbolTableList<GlobalVariable> & GlobalList = M.getGlobalList();
