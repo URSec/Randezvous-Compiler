@@ -26,6 +26,8 @@ STATISTIC(NumAllocasPromoted, "Number of allocas promoted to globals");
 STATISTIC(NumAllocasSCC, "Number of allocas not promoted due to SCC");
 STATISTIC(NumAllocasVarSize, "Number of allocas not promoted due to variable size");
 
+STATISTIC(NumBytesPromoted, "Total size of allocas promoted to globals");
+
 char ARMRandezvousLGPromote::ID = 0;
 
 ARMRandezvousLGPromote::ARMRandezvousLGPromote() : ModulePass(ID) {
@@ -71,6 +73,7 @@ ARMRandezvousLGPromote::runOnModule(Module & M) {
   }
 
   bool changed = false;
+  const DataLayout & DL = M.getDataLayout();
 
   // Loop over SCCs instead of functions; this allows us to naturally skip
   // recursive functions
@@ -128,6 +131,7 @@ ARMRandezvousLGPromote::runOnModule(Module & M) {
         AI->replaceAllUsesWith(GV);
         AI->eraseFromParent();
         ++NumAllocasPromoted;
+        NumBytesPromoted += DL.getTypeAllocSize(AllocatedTy);
         changed = true;
       }
     }
