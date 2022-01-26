@@ -58,13 +58,13 @@ GDLR("arm-randezvous-gdlr",
      cl::location(EnableRandezvousGDLR),
      cl::init(false));
 
-bool EnableRandezvousGRBG;
+bool EnableRandezvousCDC;
 static cl::opt<bool, true>
-GRBG("arm-randezvous-grbg",
-     cl::Hidden,
-     cl::desc("Enable ARM Randezvou Global Random Background"),
-     cl::location(EnableRandezvousGRBG),
-     cl::init(false));
+CDC("arm-randezvous-cdc",
+    cl::Hidden,
+    cl::desc("Enable ARM Randezvous Control Data Camouflaging"),
+    cl::location(EnableRandezvousCDC),
+    cl::init(false));
 
 bool EnableRandezvousGlobalGuard;
 static cl::opt<bool, true>

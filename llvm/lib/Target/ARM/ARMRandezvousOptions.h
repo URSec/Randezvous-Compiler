@@ -24,7 +24,7 @@ extern bool EnableRandezvousBBLR;
 extern bool EnableRandezvousBBCLR;
 extern bool EnableRandezvousPicoXOM;
 extern bool EnableRandezvousGDLR;
-extern bool EnableRandezvousGRBG;
+extern bool EnableRandezvousCDC;
 extern bool EnableRandezvousGlobalGuard;
 extern bool EnableRandezvousShadowStack;
 extern bool EnableRandezvousRAN;

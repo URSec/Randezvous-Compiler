@@ -86,7 +86,7 @@ ARMRandezvousShadowStack::createShadowStack(Module & M) {
   // Initialize the shadow stack if not initialized
   if (!SS->hasInitializer()) {
     Constant * SSInit = nullptr;
-    if (EnableRandezvousGRBG) {
+    if (EnableRandezvousCDC) {
       // Initialize the shadow stack with an array of random values; they are
       // either random trap block addresses or purely random values with the
       // LSB set
@@ -637,7 +637,7 @@ ARMRandezvousShadowStack::nullifyReturnAddress(MachineInstr & MI,
                          .add(predOps(Pred, PredReg))
                          .addReg(FreeReg));
     }
-    if (EnableRandezvousGRBG) {
+    if (EnableRandezvousCDC) {
       if (!TrapBlocks.empty()) {
         // Use the address of a trap block as the null value
         uint64_t Idx = (*RNG)() % TrapBlocks.size();
