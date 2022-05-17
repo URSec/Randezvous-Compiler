@@ -365,13 +365,12 @@ ARMRandezvousGDLR::insertGarbageObjects(GlobalVariable & GV,
       }
       Initializer = ConstantArray::get(ObjectTy, InitArray);
     } else {
-      // Initialize the garbage object with random values that have the LSB
-      // set; this serves as the Thumb bit
+      // Initialize the garbage object with random values
       std::vector<Constant *> InitArray;
       for (uint64_t i = 0; i < ObjectSize / PtrSize; ++i) {
         InitArray.push_back(Constant::getIntegerValue(BlockAddrTy,
                                                       APInt(8 * PtrSize,
-                                                            (*RNG)() | 0x1)));
+                                                            (*RNG)())));
       }
       Initializer = ConstantArray::get(ObjectTy, InitArray);
     }
