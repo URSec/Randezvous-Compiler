@@ -572,7 +572,7 @@ ARMRandezvousShadowStack::nullifyReturnAddress(MachineInstr & MI,
                               .addReg(ARM::SP);
     for (MachineOperand & MO : MI.explicit_operands()) {
       if (MO.isReg() && MO.getReg() == ARM::PC) {
-        MIB.addReg(ARM::LR);
+        MIB.addReg(ARM::LR, RegState::Define);
       } else {
         MIB.add(MO);
       }
