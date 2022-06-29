@@ -355,7 +355,7 @@ ARMRandezvousGDLR::insertGarbageObjects(GlobalVariable & GV,
     if (GV.hasInitializer() && GV.getInitializer()->isZeroValue()) {
       // GV is in BSS, so initialize the garbage object with zeros
       Initializer = Constant::getNullValue(ObjectTy);
-    } else if (EnableRandezvousCDC && !TrapBlocks.empty()) {
+    } else if (EnableRandezvousDecoyPointers && !TrapBlocks.empty()) {
       // Initialize the garbage object with addresses of random trap blocks
       std::vector<Constant *> InitArray;
       for (uint64_t i = 0; i < ObjectSize / PtrSize; ++i) {

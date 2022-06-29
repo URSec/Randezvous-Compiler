@@ -58,13 +58,13 @@ GDLR("arm-randezvous-gdlr",
      cl::location(EnableRandezvousGDLR),
      cl::init(false));
 
-bool EnableRandezvousCDC;
+bool EnableRandezvousDecoyPointers;
 static cl::opt<bool, true>
-CDC("arm-randezvous-cdc",
-    cl::Hidden,
-    cl::desc("Enable ARM Randezvous Control Data Camouflaging"),
-    cl::location(EnableRandezvousCDC),
-    cl::init(false));
+DecoyPointers("arm-randezvous-dp",
+              cl::Hidden,
+              cl::desc("Enable ARM Randezvous Decoy Pointers"),
+              cl::location(EnableRandezvousDecoyPointers),
+              cl::init(false));
 
 bool EnableRandezvousGlobalGuard;
 static cl::opt<bool, true>
