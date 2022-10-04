@@ -1,7 +1,10 @@
 //===- ARMRandezvousCDLA.cpp - ARM Randezvous Control Data Leakage Analysis ==//
 //
-// This file was written by at the University of Rochester.
-// All Rights Reserved.
+// Copyright (c) 2021-2022, University of Rochester
+//
+// Part of the Randezvous Project, under the Apache License v2.0 with
+// LLVM Exceptions.  See LICENSE.txt in the llvm directory for license
+// information.
 //
 //===----------------------------------------------------------------------===//
 //
